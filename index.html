@@ -198,6 +198,10 @@
   <section id="scr-confirm" class="screen">
     <h2 class="section" id="confirmTitle">登録前の確認</h2>
 
+    <div id="readNote" class="banner info hidden">
+      <span class="b-ico">🔎</span>
+      <span id="readNoteText"></span>
+    </div>
     <div id="dupBanner" class="banner warn hidden">
       <span class="b-ico">⚠️</span>
       <span>同じ「日付・店名・金額」の記録が既にあります。二重登録かもしれません。内容を確認してください。</span>
@@ -228,8 +232,8 @@
         <select id="fCategory"></select>
       </div>
 
-      <label class="f">購入内容</label>
-      <textarea id="fItems" placeholder="例）牛乳、卵、野菜など"></textarea>
+      <label class="f">購入内容（要約＋レシートの内訳）</label>
+      <textarea id="fItems" style="min-height:110px" placeholder="例）食料品（牛乳・卵ほか）&#10;【内訳】&#10;牛乳 ¥199&#10;卵 ¥168 …"></textarea>
 
       <label class="f">家計区分</label>
       <select id="fHousehold" onchange="onHouseholdChange()">
@@ -239,10 +243,16 @@
 
       <div id="advBox" class="hidden">
         <label class="f">立替状態</label>
-        <select id="fAdvState">
+        <select id="fAdvState" onchange="onAdvStateChange()">
           <option value="精算前">精算前</option>
           <option value="精算済み">精算済み</option>
         </select>
+        <div id="settleBox" class="hidden">
+          <label class="f">精算日</label>
+          <input id="fSettleDate" type="date">
+          <label class="f">精算額（円）</label>
+          <input id="fSettleAmount" type="number" inputmode="numeric" placeholder="0">
+        </div>
       </div>
 
       <label class="f">登録者</label>
@@ -255,11 +265,12 @@
       <input id="fNote" type="text" placeholder="">
     </div>
 
-    <button class="btn primary" onclick="submitRow()">この内容で登録する</button>
+    <button class="btn primary" id="submitBtn" onclick="submitRow()">この内容で登録する</button>
     <div class="btnrow">
-      <button class="btn ghost" onclick="goTab('input')">登録しない（やめる）</button>
+      <button class="btn ghost" id="cancelBtn" onclick="goTab('input')">登録しない（やめる）</button>
+      <button class="btn danger hidden" id="deleteBtn" onclick="deleteCurrent()">この記録を削除</button>
     </div>
-    <p class="hint">上の内容を直せば「修正」になります。直してからもう一度「登録する」を押してください。</p>
+    <p class="hint" id="confirmHint">上の内容を直せば「修正」になります。直してからもう一度「登録する」を押してください。</p>
   </section>
 
   <!-- ============ カレンダー ============ -->
@@ -379,6 +390,7 @@ let state = {
   kubun: '支出',
   rowsCache: {},   // month -> rows
   chart: null,
+  editingId: null, // 編集中の取引ID（新規登録時は null）
 };
 
 /* ===================== 起動 ===================== */
@@ -444,19 +456,41 @@ async function onFile(ev){
   }catch(e){ hideOverlay(); alert('エラー：'+e); }
 }
 
-/* 確認画面に値を流し込む */
+/* 確認画面を「新規登録モード」にして値を流し込む */
 function fillConfirm(d, fromReceipt){
+  // 新規登録モードに戻す
+  state.editingId = null;
+  document.getElementById('submitBtn').textContent = 'この内容で登録する';
+  document.getElementById('deleteBtn').classList.add('hidden');
+  document.getElementById('confirmHint').textContent =
+    '上の内容を直せば「修正」になります。直してからもう一度「登録する」を押してください。';
+
   setKubun('支出');
   document.getElementById('fAmount').value = (d.total!=null? d.total : '');
   document.getElementById('fDate').value = d.date || '';
   document.getElementById('fStore').value = d.store || '';
   document.getElementById('fCategory').value = d.category || 'その他';
-  document.getElementById('fItems').value = d.items || '';
+  document.getElementById('fItems').value = buildItemsText(d);
   document.getElementById('fHousehold').value = '通常支出';
   document.getElementById('fRegistrant').value = store.registrant;
   document.getElementById('fNote').value = '';
   document.getElementById('fAdvState').value = '精算前';
+  document.getElementById('fSettleDate').value = '';
+  document.getElementById('fSettleAmount').value = '';
   onHouseholdChange();
+
+  // 読み取りメモ（合計・用途の根拠）を表示して確認しやすくする
+  const note = document.getElementById('readNote');
+  const noteText = document.getElementById('readNoteText');
+  if(fromReceipt && (d.total_source || d.category_reason)){
+    const parts=[];
+    if(d.total_source) parts.push('合計は「'+d.total_source+'」から読み取り');
+    if(d.category_reason) parts.push('用途：'+d.category_reason);
+    noteText.textContent = parts.join(' ／ ');
+    note.classList.remove('hidden');
+  }else{
+    note.classList.add('hidden');
+  }
 
   // 読み取れなかった必須項目を赤枠に
   const missBanner = document.getElementById('missBanner');
@@ -475,15 +509,62 @@ function fillConfirm(d, fromReceipt){
   checkDup();
 }
 
+/* 既存の記録を「編集モード」で確認画面に開く */
+function startEdit(r){
+  state.editingId = r.id;
+  document.getElementById('confirmTitle').textContent = '記録の修正・削除';
+  document.getElementById('submitBtn').textContent = 'この内容で更新する';
+  document.getElementById('deleteBtn').classList.remove('hidden');
+  document.getElementById('confirmHint').textContent =
+    '内容を直して「更新する」を押すと、スプレッドシートにも反映されます。';
+
+  setKubun(r.kubun || '支出');
+  document.getElementById('fAmount').value = (r.amount!=null? r.amount : '');
+  document.getElementById('fDate').value = r.date || '';
+  document.getElementById('fStore').value = r.store || '';
+  document.getElementById('fCategory').value = r.category || 'その他';
+  document.getElementById('fItems').value = r.items || '';
+  document.getElementById('fHousehold').value = r.householdType || '通常支出';
+  document.getElementById('fRegistrant').value = r.registrant || store.registrant;
+  document.getElementById('fNote').value = r.note || '';
+  document.getElementById('fAdvState').value = r.advanceState || '精算前';
+  document.getElementById('fSettleDate').value = r.settleDate || '';
+  document.getElementById('fSettleAmount').value = r.settleAmount || '';
+  onHouseholdChange();
+
+  // 各種バナーは隠す
+  document.getElementById('readNote').classList.add('hidden');
+  document.getElementById('missBanner').classList.add('hidden');
+  document.getElementById('dupBanner').classList.add('hidden');
+  ['fAmount','fDate','fStore'].forEach(id=>document.getElementById(id).classList.remove('missing'));
+  showConfirm();
+}
+
+/* レシート読み取り結果から「購入内容」欄のテキストを組み立てる（要約＋内訳を残す） */
+function buildItemsText(d){
+  const summary = (d.summary || d.items || '').trim();
+  const details = (d.details || '').trim();
+  if(details && summary) return summary + '\n【内訳】\n' + details;
+  if(details) return details;
+  return summary;
+}
+
 function setKubun(v){
   state.kubun = v;
   document.querySelectorAll('#kubunSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  // 収入・貯金のときは支出項目を隠す
   document.getElementById('catBox').style.display = (v==='支出') ? '' : 'none';
 }
 function onHouseholdChange(){
   const adv = document.getElementById('fHousehold').value === '会社立替';
   document.getElementById('advBox').classList.toggle('hidden', !adv);
   if(adv) document.getElementById('fCategory').value = '会社の立替金';
+  onAdvStateChange();
+}
+function onAdvStateChange(){
+  const adv = document.getElementById('fHousehold').value === '会社立替';
+  const done = document.getElementById('fAdvState').value === '精算済み';
+  document.getElementById('settleBox').classList.toggle('hidden', !(adv && done));
 }
 function clearMiss(el){ el.classList.remove('missing'); if(el.id==='fAmount'||el.id==='fDate'||el.id==='fStore') checkDupDebounced(); }
 
@@ -524,31 +605,62 @@ async function submitRow(){
     return;
   }
 
+  const isAdv = document.getElementById('fHousehold').value==='会社立替';
+  const advState = isAdv ? document.getElementById('fAdvState').value : '';
+  const settled = isAdv && advState==='精算済み';
   const row = {
     date, amount, store:st,
     kubun: state.kubun,
     category: state.kubun==='支出' ? document.getElementById('fCategory').value : '',
     items: document.getElementById('fItems').value.trim(),
     householdType: document.getElementById('fHousehold').value,
-    advanceState: document.getElementById('fHousehold').value==='会社立替' ? document.getElementById('fAdvState').value : '',
+    advanceState: advState,
+    settleDate: settled ? document.getElementById('fSettleDate').value : '',
+    settleAmount: settled ? document.getElementById('fSettleAmount').value : '',
     registrant: document.getElementById('fRegistrant').value,
     note: document.getElementById('fNote').value.trim(),
   };
 
-  showOverlay('登録中…');
+  const editing = !!state.editingId;
+  showOverlay(editing ? '更新中…' : '登録中…');
   try{
     if(isDemo()){
-      await sleep(700);
-      pushDemoRow(row);
+      await sleep(600);
+      if(editing) updateDemoRow(state.editingId, row); else pushDemoRow(row);
     }else{
-      const res = await api('addRow', {row});
-      if(!res.ok){ hideOverlay(); alert('登録に失敗しました：\n'+res.error); return; }
+      const res = editing
+        ? await api('updateRow', {id: state.editingId, row})
+        : await api('addRow', {row});
+      if(!res.ok){ hideOverlay(); alert((editing?'更新':'登録')+'に失敗しました：\n'+res.error); return; }
     }
     state.rowsCache = {}; // キャッシュ破棄
     state.selectedDay = row.date;
+    state.editingId = null;
     hideOverlay();
     goTab('calendar');
-    toast('登録しました ✅');
+    toast(editing ? '更新しました ✅' : '登録しました ✅');
+  }catch(e){ hideOverlay(); alert('エラー：'+e); }
+}
+
+/* 編集中の記録を削除 */
+async function deleteCurrent(){
+  if(!state.editingId) return;
+  const st = document.getElementById('fStore').value.trim() || 'この記録';
+  if(!confirm('「'+st+'」を削除します。よろしいですか？\n（スプレッドシートからも削除されます）')) return;
+  showOverlay('削除中…');
+  try{
+    if(isDemo()){
+      await sleep(500);
+      deleteDemoRow(state.editingId);
+    }else{
+      const res = await api('delete', {id: state.editingId});
+      if(!res.ok){ hideOverlay(); alert('削除に失敗しました：\n'+res.error); return; }
+    }
+    state.rowsCache = {};
+    state.editingId = null;
+    hideOverlay();
+    goTab('calendar');
+    toast('削除しました 🗑️');
   }catch(e){ hideOverlay(); alert('エラー：'+e); }
 }
 
@@ -638,28 +750,16 @@ function renderItem(r){
   }
   const div=document.createElement('div');
   div.className='item';
+  div.style.cursor='pointer';
   const sign = r.kubun==='収入' ? '+' : '';
   div.innerHTML =
     '<span class="dot" style="background:'+colorFor(r.category)+'"></span>'+
     '<div class="mid"><div class="t1">'+esc(r.store||r.kubun)+ (adv?'<span class="tag adv">立替</span>':'') +tag+'</div>'+
     '<div class="t2">'+esc(r.date)+'　'+esc(r.kubun==='支出'?(r.category||''):r.kubun)+'　'+esc(r.registrant)+'</div></div>'+
-    '<div class="amt">'+sign+yen(r.amount)+'</div>';
-  if(adv && r.advanceState!=='精算済み'){
-    div.style.cursor='pointer';
-    div.onclick=()=>settlePrompt(r);
-  }
+    '<div class="amt">'+sign+yen(r.amount)+'</div>'+
+    '<span class="chev" style="color:#ccc;font-size:15px;margin-left:4px;">›</span>';
+  div.onclick=()=>startEdit(r);   // タップで編集・削除画面を開く
   return div;
-}
-async function settlePrompt(r){
-  const d = prompt('「'+r.store+'」を精算済みにします。\n精算日を入力（YYYY-MM-DD）：', todayStr());
-  if(d===null) return;
-  const a = prompt('精算額（円）：', String(r.amount));
-  if(a===null) return;
-  showOverlay('更新中…');
-  if(isDemo()){ await sleep(500); r.advanceState='精算済み'; r.settleDate=d; r.settleAmount=a; hideOverlay(); loadCalendar(); return; }
-  const res=await api('settle',{id:r.id, settleDate:d, settleAmount:a});
-  hideOverlay();
-  if(res.ok){ state.rowsCache={}; loadCalendar(); toast('精算済みにしました'); } else alert('失敗：'+res.error);
 }
 
 /* ===================== グラフ ===================== */
@@ -685,6 +785,7 @@ async function loadChart(){
   document.getElementById('centerLbl').textContent = state.chartKubun;
   document.getElementById('centerVal').textContent = yen(total);
   document.getElementById('chartTotal').textContent = yen(total);
+
   // グラフの並びはカテゴリー定義順（支出）、その他は単色
   let labels, values, colors;
   if(state.chartKubun==='支出'){
@@ -850,8 +951,26 @@ function pushDemoRow(row){
     householdType:row.householdType,registrant:row.registrant,confirmState:'確認済み',
     advanceState:row.advanceState,settleDate:'',settleAmount:'',note:row.note});
 }
+function updateDemoRow(id, row){
+  Object.keys(_demoStore||{}).forEach(m=>{
+    _demoStore[m] = _demoStore[m].filter(r=>r.id!==id);
+  });
+  pushDemoRow(Object.assign({}, row, {id}));
+  // pushDemoRowは新IDを振るので、指定IDを保持したい場合は直接調整
+  const m=row.date.slice(0,7);
+  const last=_demoStore[m][_demoStore[m].length-1];
+  if(last) last.id=id;
+}
+function deleteDemoRow(id){
+  Object.keys(_demoStore||{}).forEach(m=>{
+    _demoStore[m] = _demoStore[m].filter(r=>r.id!==id);
+  });
+}
 function demoParse(){
-  return {date:todayStr(), store:'スーパーマルエツ', total:2480, category:'食費', items:'牛乳、卵、パン、野菜'};
+  return {date:todayStr(), store:'（デモ）スーパー○○', total:2480, category:'食費',
+    total_source:'合計', category_reason:'（デモ用のサンプル）',
+    summary:'食料品（牛乳・卵ほか）',
+    details:'牛乳 ¥199\n卵 ¥168\nパン ¥158\n野菜 ¥300'};
 }
 </script>
 </body>
