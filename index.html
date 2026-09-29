@@ -891,11 +891,41 @@ async function apiGet(params){
 }
 
 /* ===================== ユーティリティ ===================== */
-function fileToBase64(file){
+// そのままの生データを base64 で返す（フォールバック用）
+function fileRawBase64(file){
   return new Promise((resolve,reject)=>{
     const r=new FileReader();
     r.onload=()=>{ const s=r.result; const base64=s.split(',')[1]; const mime=s.substring(5, s.indexOf(';')); resolve({base64,mime}); };
     r.onerror=reject; r.readAsDataURL(file);
+  });
+}
+// 送信前に画像を縮小してアップロード＆解析を高速化する。
+// 長辺を最大1600pxに縮小し、JPEG(品質0.75)で送る。失敗時は生データにフォールバック。
+function fileToBase64(file){
+  return new Promise((resolve)=>{
+    try{
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const MAX=1600;
+          let {width:w, height:h}=img;
+          const scale=Math.min(1, MAX/Math.max(w,h));
+          const nw=Math.max(1, Math.round(w*scale));
+          const nh=Math.max(1, Math.round(h*scale));
+          const c=document.createElement('canvas');
+          c.width=nw; c.height=nh;
+          const ctx=c.getContext('2d');
+          ctx.fillStyle='#fff'; ctx.fillRect(0,0,nw,nh);
+          ctx.drawImage(img,0,0,nw,nh);
+          const dataUrl=c.toDataURL('image/jpeg',0.75);
+          URL.revokeObjectURL(url);
+          resolve({ base64: dataUrl.split(',')[1], mime:'image/jpeg' });
+        }catch(e){ URL.revokeObjectURL(url); fileRawBase64(file).then(resolve); }
+      };
+      img.onerror=()=>{ URL.revokeObjectURL(url); fileRawBase64(file).then(resolve); };
+      img.src=url;
+    }catch(e){ fileRawBase64(file).then(resolve); }
   });
 }
 function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
