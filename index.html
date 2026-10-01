@@ -20,9 +20,16 @@
 
   /* ヘッダー */
   header{background:var(--orange); color:#fff; padding:calc(14px + var(--safe-top)) 16px 14px;
-         position:sticky; top:0; z-index:20;}
+         position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:10px;}
   header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:.02em;}
   header .sub{font-size:12px; opacity:.9; margin-top:2px;}
+  .refreshbtn{flex:none; display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,.22);
+         color:#fff; border:1px solid rgba(255,255,255,.55); border-radius:20px; padding:7px 13px;
+         font-size:13px; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .refreshbtn:active{background:rgba(255,255,255,.35);}
+  .refreshbtn .ri{font-size:14px; display:inline-block;}
+  .refreshbtn.spinning .ri{animation:rspin .8s linear infinite;}
+  @keyframes rspin{to{transform:rotate(360deg);}}
 
   /* 画面共通 */
   .screen{padding:16px; display:none;}
@@ -121,11 +128,35 @@
   a{color:var(--orange);}
 
   /* ===== カレンダー ===== */
-  .calsum{display:flex; gap:8px; margin-bottom:12px;}
-  .calsum .s{flex:1; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px 6px; text-align:center;}
+  .calsum{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .calsum .s{flex:1 1 calc(50% - 4px); min-width:0; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px 6px; text-align:center;}
   .calsum .s span{display:block; font-size:11px; color:var(--sub); margin-bottom:2px;}
   .calsum .s b{font-size:14px;}
   .calsum .s.inc b{color:var(--ok);} .calsum .s.exp b{color:var(--danger);}
+  .calsum .s.adv b{color:var(--orange);}
+  .calsum .s.net{background:#fff8ef; border-color:var(--orange);}
+  .calsum .s.net b{color:var(--orange-d); font-size:15px;}
+
+  /* ===== 予算チェック ===== */
+  .bcard{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;}
+  .bcard.total{background:#fff8ef; border-color:var(--orange);}
+  .bhead{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;}
+  .bhead .bname{font-weight:700; font-size:15px;}
+  .bhead .bpct{font-size:12px; color:var(--sub);}
+  .bbar{height:10px; background:#f0efec; border-radius:6px; overflow:hidden; margin:6px 0 10px;}
+  .bbar>i{display:block; height:100%; background:var(--orange); border-radius:6px;}
+  .bbar>i.ok{background:var(--ok);}
+  .bbar>i.over{background:var(--danger);}
+  .bnums{display:flex; gap:8px;}
+  .bnums .bn{flex:1; text-align:center;}
+  .bnums .bn span{display:block; font-size:10.5px; color:var(--sub); margin-bottom:2px;}
+  .bnums .bn b{font-size:13.5px;}
+  .bpace{font-size:12px; margin-top:8px; font-weight:700;}
+  .bpace.ok{color:var(--ok);} .bpace.over{color:var(--danger);}
+  .bitems{margin-top:10px; border-top:1px dashed var(--line); padding-top:6px;}
+  .bitems summary{font-size:12.5px; color:var(--sub); cursor:pointer; padding:2px 0;}
+  .bitem{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0;}
+  .bitem.zero{color:#bbb;}
   .calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:8px;}
   .cal-wd{text-align:center; font-size:11px; color:var(--sub); padding:3px 0;}
   .cal-wd.sun{color:var(--danger);} .cal-wd.sat{color:#3b7dd8;}
@@ -168,8 +199,11 @@
   <div id="demoBadge" class="demo-badge hidden">デモモード（設定でGASのURLを登録すると本番接続になります）</div>
   <div class="content">
   <header>
-    <h1>📒 我が家の家計簿</h1>
-    <div class="sub" id="who">登録者：—</div>
+    <div class="hleft">
+      <h1>📒 我が家の家計簿</h1>
+      <div class="sub" id="who">登録者：—</div>
+    </div>
+    <button id="refreshBtn" class="refreshbtn" onclick="refreshData()"><span class="ri">🔄</span>更新</button>
   </header>
 
   <!-- ============ 入力 ============ -->
@@ -315,6 +349,17 @@
     <div id="catList"></div>
   </section>
 
+  <!-- ============ 予算チェック ============ -->
+  <section id="scr-budget" class="screen">
+    <div class="monthnav">
+      <button onclick="changeMonth(-1,'budget')">◀</button>
+      <span class="m" id="budgetMonth"></span>
+      <button onclick="changeMonth(1,'budget')">▶</button>
+    </div>
+    <div id="budgetBody"></div>
+    <p class="hint" id="budgetNote" style="margin-top:6px; line-height:1.6;"></p>
+  </section>
+
   <!-- ============ 設定 ============ -->
   <section id="scr-settings" class="screen">
     <div class="card">
@@ -353,6 +398,7 @@
     <button class="on" data-t="input" onclick="goTab('input')"><span class="i">✏️</span>入力</button>
     <button data-t="calendar" onclick="goTab('calendar')"><span class="i">📅</span>カレンダー</button>
     <button data-t="chart" onclick="goTab('chart')"><span class="i">📊</span>グラフ</button>
+    <button data-t="budget" onclick="goTab('budget')"><span class="i">🎯</span>予算</button>
     <button data-t="settings" onclick="goTab('settings')"><span class="i">⚙️</span>設定</button>
   </nav>
 </div>
@@ -416,12 +462,27 @@ function goTab(t){
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
   if(t==='chart') loadChart();
   if(t==='calendar') loadCalendar();
+  if(t==='budget') loadBudget();
   window.scrollTo(0,0);
 }
 function showConfirm(){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('scr-confirm').classList.add('active');
   window.scrollTo(0,0);
+}
+/* 最新データに更新（キャッシュ破棄→今の画面を再読み込み） */
+async function refreshData(){
+  const btn=document.getElementById('refreshBtn');
+  if(btn) btn.classList.add('spinning');
+  state.rowsCache={};
+  try{
+    const active=(document.querySelector('.screen.active')||{}).id||'';
+    if(active==='scr-chart') await loadChart();
+    else if(active==='scr-budget') await loadBudget();
+    else await loadCalendar();
+    toast('最新に更新しました');
+  }catch(e){ console.warn(e); toast('更新に失敗しました'); }
+  finally{ setTimeout(()=>{ if(btn) btn.classList.remove('spinning'); },400); }
 }
 
 /* ===================== 写真 → 読み取り ===================== */
@@ -678,13 +739,24 @@ async function loadCalendar(){
   document.getElementById('calMonth').textContent = monthLabel(state.currentMonth);
   const rows = await getRows(state.currentMonth);
 
-  // 月サマリー（収入/支出/合計）
-  let inc=0, exp=0;
-  rows.forEach(r=>{ if(r.kubun==='収入') inc+=r.amount; else if(r.kubun==='支出') exp+=r.amount; });
+  // 月サマリー（収入/支出/立替/差額）
+  //  ・支出 = その月の支出合計（会社立替も含む）
+  //  ・立替 = 会社立替（=将来戻ってくる経費）の合計
+  //  ・差額（実質支出）= 支出合計 − 立替合計 … 家計の本当の負担
+  let inc=0, exp=0, adv=0;
+  rows.forEach(r=>{
+    if(r.kubun==='収入') inc+=r.amount;
+    else if(r.kubun==='支出'){
+      exp+=r.amount;
+      if(r.householdType==='会社立替') adv+=r.amount;
+    }
+  });
+  const net = exp - adv; // 差額（立替を除いた実質の家計支出）
   document.getElementById('calSum').innerHTML =
     '<div class="s inc"><span>収入</span><b>'+yen(inc)+'</b></div>'+
-    '<div class="s exp"><span>支出</span><b>'+yen(exp)+'</b></div>'+
-    '<div class="s tot"><span>合計</span><b>'+yen(inc-exp)+'</b></div>';
+    '<div class="s exp"><span>支出（立替込み）</span><b>'+yen(exp)+'</b></div>'+
+    '<div class="s adv"><span>うち立替</span><b>'+yen(adv)+'</b></div>'+
+    '<div class="s net"><span>差額（実質支出）</span><b>'+yen(net)+'</b></div>';
 
   // 日別集計
   const perDay={};
@@ -825,13 +897,90 @@ function drawDonut(labels, values, colors){
   });
 }
 
+/* ===================== 予算チェック（新目標） ===================== */
+const BUDGET = {
+  total: 549719,
+  g: {
+    rakuten: { name:'楽天カード', total:274155, items:[
+      ['水道代',5717],['ガス代',8000],['電気代',10000],['ネット代',6000],['携帯代',20000],
+      ['ガソリン代',0],['サブスク・デジタル費',20654],['Word・Excel代',1284],
+      ['旦那 衣服代',10000],['嫁 衣服代',10000],['子ども衣類',10000],
+      ['夫婦 老後資金積立（投信）',50000],['食費',40000],['外食費',30000],['ネスプレッソ',0],
+      ['日用品',10000],['交通費',10000],['グランベリー費',12500],['レジャー費',20000]
+    ]},
+    bank: { name:'銀行引き落とし', total:255731, items:[
+      ['住宅ローン（旦那）',118000],['管理費・修繕費',3000],['奨学金返済',17331],
+      ['旦那 PayPayカード（小遣い）',20000],['嫁 お小遣い',20000],
+      ['娘 教育資金積立（投信）',30000],['娘 保育園代',6350],
+      ['旦那 時計代（JACCS）',5400],['ECC',12650],['ピアノ',8000],['ダンス',15000]
+    ]},
+    insurance: { name:'不定期費用・保険', total:19833, items:[
+      ['火災保険・地震保険',3333],['固定資産税',6500],['保険費用（夫婦合計）',10000]
+    ]}
+  }
+};
+function budgetCard(name, target, actual, items, opts){
+  opts=opts||{};
+  const pct = target>0 ? Math.round(actual/target*100) : 0;
+  const remain = target - actual;
+  const barW = Math.max(0, Math.min(100, pct));
+  let barCls='', paceHtml='';
+  if(opts.pace && opts.isCurrent){
+    const elapsedPct = Math.round(opts.elapsed*100);
+    if((target>0 ? actual/target : 0) <= opts.elapsed){
+      barCls='ok';
+      paceHtml='<div class="bpace ok">順調：今日は月の'+elapsedPct+'%、予算の'+pct+'%を使用</div>';
+    }else{
+      barCls='over';
+      paceHtml='<div class="bpace over">ペース超過：今日は月の'+elapsedPct+'%なのに予算の'+pct+'%を使用</div>';
+    }
+  }else if(pct>100){ barCls='over'; }
+  let itemsHtml='';
+  if(items){
+    itemsHtml='<div class="bitems"><details><summary>明細（目標）を見る</summary>'+
+      items.map(it=>'<div class="bitem'+(it[1]===0?' zero':'')+'"><span>'+esc(it[0])+'</span><span>'+yen(it[1])+'</span></div>').join('')+
+      '</details></div>';
+  }
+  return '<div class="bcard'+(opts.isTotal?' total':'')+'">'+
+    '<div class="bhead"><span class="bname">'+esc(name)+'</span><span class="bpct">達成率 '+pct+'%</span></div>'+
+    '<div class="bbar"><i class="'+barCls+'" style="width:'+barW+'%"></i></div>'+
+    '<div class="bnums">'+
+      '<div class="bn"><span>目標</span><b>'+yen(target)+'</b></div>'+
+      '<div class="bn"><span>実績</span><b>'+yen(actual)+'</b></div>'+
+      '<div class="bn"><span>残り</span><b style="color:'+(remain<0?'var(--danger)':'var(--ok)')+'">'+yen(remain)+'</b></div>'+
+    '</div>'+ paceHtml + itemsHtml + '</div>';
+}
+async function loadBudget(){
+  document.getElementById('budgetMonth').textContent = monthLabel(state.currentMonth);
+  const rows = await getRows(state.currentMonth);
+  let exp=0, adv=0;
+  rows.forEach(r=>{ if(r.kubun==='支出'){ exp+=r.amount; if(r.householdType==='会社立替') adv+=r.amount; } });
+  const rakutenActual = exp - adv; // 立替を除いた支出＝楽天カードのレシート実績
+  const [yy,mm]=state.currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(yy, mm, 0).getDate();
+  const now = new Date();
+  const isCurrent = (monthKey(now)===state.currentMonth);
+  const elapsed = isCurrent ? now.getDate()/daysInMonth : 1;
+  const bank=BUDGET.g.bank.total, ins=BUDGET.g.insurance.total;
+  const totalActual = bank + ins + rakutenActual;
+  let h='';
+  h+=budgetCard('総予算（新目標）', BUDGET.total, totalActual, null, {isTotal:true});
+  h+=budgetCard(BUDGET.g.rakuten.name+'（レシートで管理）', BUDGET.g.rakuten.total, rakutenActual, BUDGET.g.rakuten.items, {pace:true, isCurrent:isCurrent, elapsed:elapsed});
+  h+=budgetCard(BUDGET.g.bank.name+'（固定・支払予定）', BUDGET.g.bank.total, bank, BUDGET.g.bank.items, {});
+  h+=budgetCard(BUDGET.g.insurance.name+'（固定）', BUDGET.g.insurance.total, ins, BUDGET.g.insurance.items, {});
+  document.getElementById('budgetBody').innerHTML = h;
+  document.getElementById('budgetNote').innerHTML =
+    '※ 楽天カードの実績＝アプリに記録した今月の支出（立替を除く）を自動集計しています。<br>'+
+    '※ 銀行引き落とし・保険は新目標の固定額で表示（支払予定どおりの想定）。金額を変えたいときは教えてください。';
+}
+
 /* ===================== 月移動 ===================== */
 function changeMonth(delta, which){
   const [y,m]=state.currentMonth.split('-').map(Number);
   const d=new Date(y, m-1+delta, 1);
   state.currentMonth=monthKey(d);
   state.selectedDay=null;
-  if(which==='chart') loadChart(); else loadCalendar();
+  if(which==='chart') loadChart(); else if(which==='budget') loadBudget(); else loadCalendar();
 }
 
 /* ===================== データ取得（キャッシュ付き） ===================== */
