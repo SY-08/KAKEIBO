@@ -157,6 +157,17 @@
   .bitems summary{font-size:12.5px; color:var(--sub); cursor:pointer; padding:2px 0;}
   .bitem{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0;}
   .bitem.zero{color:#bbb;}
+  .bhead .bsub{font-size:11px; color:var(--sub); font-weight:400; margin-left:2px;}
+  .bli{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #f3f1ee; font-size:12.5px;}
+  .bli .nm{flex:1; min-width:0; font-weight:600;}
+  .bli .vs{display:flex; gap:7px; align-items:center; white-space:nowrap;}
+  .bli .vs span{color:var(--sub); font-size:10px;}
+  .bli .vs b{font-weight:600;}
+  .bli .vs em{color:var(--sub); font-size:10px; font-style:normal; width:76px; text-align:center; display:inline-block;}
+  .bli.bli-head{padding:2px 0; border-top:none;}
+  .bli .vs input{width:76px; padding:5px 6px; font-size:12px; text-align:right; border:1.5px solid var(--line); border-radius:7px; background:#fff;}
+  .bedit-actions{display:flex; gap:8px; margin:4px 0 12px;}
+  .btn.sm{padding:9px 12px; font-size:13px;}
   .calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:8px;}
   .cal-wd{text-align:center; font-size:11px; color:var(--sub); padding:3px 0;}
   .cal-wd.sun{color:var(--danger);} .cal-wd.sat{color:#3b7dd8;}
@@ -274,20 +285,6 @@
         <option value="通常支出">通常支出</option>
         <option value="会社立替">会社立替（経費精算）</option>
       </select>
-
-      <div id="advBox" class="hidden">
-        <label class="f">立替状態</label>
-        <select id="fAdvState" onchange="onAdvStateChange()">
-          <option value="精算前">精算前</option>
-          <option value="精算済み">精算済み</option>
-        </select>
-        <div id="settleBox" class="hidden">
-          <label class="f">精算日</label>
-          <input id="fSettleDate" type="date">
-          <label class="f">精算額（円）</label>
-          <input id="fSettleAmount" type="number" inputmode="numeric" placeholder="0">
-        </div>
-      </div>
 
       <label class="f">登録者</label>
       <select id="fRegistrant">
@@ -535,9 +532,6 @@ function fillConfirm(d, fromReceipt){
   document.getElementById('fHousehold').value = '通常支出';
   document.getElementById('fRegistrant').value = store.registrant;
   document.getElementById('fNote').value = '';
-  document.getElementById('fAdvState').value = '精算前';
-  document.getElementById('fSettleDate').value = '';
-  document.getElementById('fSettleAmount').value = '';
   onHouseholdChange();
 
   // 読み取りメモ（合計・用途の根拠）を表示して確認しやすくする
@@ -588,9 +582,6 @@ function startEdit(r){
   document.getElementById('fHousehold').value = r.householdType || '通常支出';
   document.getElementById('fRegistrant').value = r.registrant || store.registrant;
   document.getElementById('fNote').value = r.note || '';
-  document.getElementById('fAdvState').value = r.advanceState || '精算前';
-  document.getElementById('fSettleDate').value = r.settleDate || '';
-  document.getElementById('fSettleAmount').value = r.settleAmount || '';
   onHouseholdChange();
 
   // 各種バナーは隠す
@@ -618,14 +609,7 @@ function setKubun(v){
 }
 function onHouseholdChange(){
   const adv = document.getElementById('fHousehold').value === '会社立替';
-  document.getElementById('advBox').classList.toggle('hidden', !adv);
   if(adv) document.getElementById('fCategory').value = '会社の立替金';
-  onAdvStateChange();
-}
-function onAdvStateChange(){
-  const adv = document.getElementById('fHousehold').value === '会社立替';
-  const done = document.getElementById('fAdvState').value === '精算済み';
-  document.getElementById('settleBox').classList.toggle('hidden', !(adv && done));
 }
 function clearMiss(el){ el.classList.remove('missing'); if(el.id==='fAmount'||el.id==='fDate'||el.id==='fStore') checkDupDebounced(); }
 
@@ -666,18 +650,15 @@ async function submitRow(){
     return;
   }
 
-  const isAdv = document.getElementById('fHousehold').value==='会社立替';
-  const advState = isAdv ? document.getElementById('fAdvState').value : '';
-  const settled = isAdv && advState==='精算済み';
   const row = {
     date, amount, store:st,
     kubun: state.kubun,
     category: state.kubun==='支出' ? document.getElementById('fCategory').value : '',
     items: document.getElementById('fItems').value.trim(),
     householdType: document.getElementById('fHousehold').value,
-    advanceState: advState,
-    settleDate: settled ? document.getElementById('fSettleDate').value : '',
-    settleAmount: settled ? document.getElementById('fSettleAmount').value : '',
+    advanceState: '',
+    settleDate: '',
+    settleAmount: '',
     registrant: document.getElementById('fRegistrant').value,
     note: document.getElementById('fNote').value.trim(),
   };
@@ -814,19 +795,13 @@ function renderDayList(){
 }
 function renderItem(r){
   const adv = r.householdType==='会社立替';
-  let tag='';
-  if(adv){
-    tag = r.advanceState==='精算済み'
-      ? '<span class="tag done">精算済</span>'
-      : '<span class="tag pend">精算前</span>';
-  }
   const div=document.createElement('div');
   div.className='item';
   div.style.cursor='pointer';
   const sign = r.kubun==='収入' ? '+' : '';
   div.innerHTML =
     '<span class="dot" style="background:'+colorFor(r.category)+'"></span>'+
-    '<div class="mid"><div class="t1">'+esc(r.store||r.kubun)+ (adv?'<span class="tag adv">立替</span>':'') +tag+'</div>'+
+    '<div class="mid"><div class="t1">'+esc(r.store||r.kubun)+ (adv?'<span class="tag adv">立替</span>':'') +'</div>'+
     '<div class="t2">'+esc(r.date)+'　'+esc(r.kubun==='支出'?(r.category||''):r.kubun)+'　'+esc(r.registrant)+'</div></div>'+
     '<div class="amt">'+sign+yen(r.amount)+'</div>'+
     '<span class="chev" style="color:#ccc;font-size:15px;margin-left:4px;">›</span>';
@@ -898,80 +873,195 @@ function drawDonut(labels, values, colors){
 }
 
 /* ===================== 予算チェック（新目標） ===================== */
+// 各項目 { k:キー, n:名称, o:旧目標, w:新目標(初期値。null=新目標では廃止) }
 const BUDGET = {
-  total: 549719,
-  g: {
-    rakuten: { name:'楽天カード', total:274155, items:[
-      ['水道代',5717],['ガス代',8000],['電気代',10000],['ネット代',6000],['携帯代',20000],
-      ['ガソリン代',0],['サブスク・デジタル費',20654],['Word・Excel代',1284],
-      ['旦那 衣服代',10000],['嫁 衣服代',10000],['子ども衣類',10000],
-      ['夫婦 老後資金積立（投信）',50000],['食費',40000],['外食費',30000],['ネスプレッソ',0],
-      ['日用品',10000],['交通費',10000],['グランベリー費',12500],['レジャー費',20000]
+  groups: [
+    { key:'rakuten', name:'楽天カード', note:'レシートで管理', items:[
+      {k:'suido',n:'水道代',o:5717,w:5717},
+      {k:'gas',n:'ガス代',o:8000,w:8000},
+      {k:'denki',n:'電気代',o:10000,w:10000},
+      {k:'net',n:'ネット代',o:6000,w:6000},
+      {k:'keitai',n:'携帯代',o:20000,w:20000},
+      {k:'gasorin',n:'ガソリン代',o:15000,w:0},
+      {k:'subsc',n:'サブスク・デジタル費',o:4000,w:20654},
+      {k:'office',n:'Word・Excel代',o:1284,w:1284},
+      {k:'clothH',n:'旦那 衣服代',o:10000,w:10000},
+      {k:'clothW',n:'嫁 衣服代',o:10000,w:10000},
+      {k:'kosodate',n:'娘 子育て費用全般',o:30000,w:null},
+      {k:'clothK',n:'子ども衣類',o:0,w:10000},
+      {k:'rougo',n:'夫婦 老後資金積立（投信）',o:50000,w:50000},
+      {k:'shoku',n:'食費',o:51000,w:40000},
+      {k:'gaishoku',n:'外食費',o:0,w:30000},
+      {k:'nespresso',n:'ネスプレッソ',o:4000,w:0},
+      {k:'nichiyo',n:'日用品',o:10000,w:10000},
+      {k:'kotsu',n:'交通費',o:0,w:10000},
+      {k:'granberry',n:'グランベリー費',o:0,w:12500},
+      {k:'leisure',n:'レジャー費',o:0,w:20000}
     ]},
-    bank: { name:'銀行引き落とし', total:255731, items:[
-      ['住宅ローン（旦那）',118000],['管理費・修繕費',3000],['奨学金返済',17331],
-      ['旦那 PayPayカード（小遣い）',20000],['嫁 お小遣い',20000],
-      ['娘 教育資金積立（投信）',30000],['娘 保育園代',6350],
-      ['旦那 時計代（JACCS）',5400],['ECC',12650],['ピアノ',8000],['ダンス',15000]
+    { key:'bank', name:'銀行引き落とし', note:'固定・支払予定', items:[
+      {k:'loanH',n:'住宅ローン（旦那）',o:115000,w:118000},
+      {k:'kanri',n:'管理費・修繕費',o:3000,w:3000},
+      {k:'shogaku',n:'奨学金返済',o:17331,w:17331},
+      {k:'paypay',n:'旦那 PayPayカード（小遣い）',o:20000,w:20000},
+      {k:'okozukaiW',n:'嫁 お小遣い',o:20000,w:20000},
+      {k:'kyoiku',n:'娘 教育資金積立（投信）',o:30000,w:30000},
+      {k:'hoikuen',n:'娘 保育園代',o:5000,w:6350},
+      {k:'tokei',n:'旦那 時計代（JACCS）',o:0,w:5400},
+      {k:'ecc',n:'ECC',o:0,w:12650},
+      {k:'piano',n:'ピアノ',o:0,w:8000},
+      {k:'dance',n:'ダンス',o:0,w:15000}
     ]},
-    insurance: { name:'不定期費用・保険', total:19833, items:[
-      ['火災保険・地震保険',3333],['固定資産税',6500],['保険費用（夫婦合計）',10000]
+    { key:'insurance', name:'不定期費用・保険', note:'固定', items:[
+      {k:'kasai',n:'火災保険・地震保険',o:3333,w:3333},
+      {k:'kotei',n:'固定資産税',o:6500,w:6500},
+      {k:'iryoH',n:'旦那 医療保険',o:1000,w:null},
+      {k:'hoken',n:'保険費用（夫婦合計）',o:0,w:10000}
     ]}
-  }
+  ]
 };
-function budgetCard(name, target, actual, items, opts){
-  opts=opts||{};
-  const pct = target>0 ? Math.round(actual/target*100) : 0;
-  const remain = target - actual;
-  const barW = Math.max(0, Math.min(100, pct));
-  let barCls='', paceHtml='';
-  if(opts.pace && opts.isCurrent){
-    const elapsedPct = Math.round(opts.elapsed*100);
-    if((target>0 ? actual/target : 0) <= opts.elapsed){
-      barCls='ok';
-      paceHtml='<div class="bpace ok">順調：今日は月の'+elapsedPct+'%、予算の'+pct+'%を使用</div>';
-    }else{
-      barCls='over';
-      paceHtml='<div class="bpace over">ペース超過：今日は月の'+elapsedPct+'%なのに予算の'+pct+'%を使用</div>';
-    }
-  }else if(pct>100){ barCls='over'; }
-  let itemsHtml='';
-  if(items){
-    itemsHtml='<div class="bitems"><details><summary>明細（目標）を見る</summary>'+
-      items.map(it=>'<div class="bitem'+(it[1]===0?' zero':'')+'"><span>'+esc(it[0])+'</span><span>'+yen(it[1])+'</span></div>').join('')+
-      '</details></div>';
+let budgetData = { targets:{}, actuals:{} };
+let budgetLoaded = false;
+let budgetReceipt = 0;
+
+function bTarget(it){ if(budgetData.targets && budgetData.targets[it.k]!=null) return Number(budgetData.targets[it.k]); return (it.w!=null ? it.w : null); }
+function bActual(k){ const m=state.currentMonth; const a=budgetData.actuals && budgetData.actuals[m]; return (a && a[k]!=null) ? Number(a[k]) : 0; }
+
+async function fetchBudget(){
+  if(isDemo()){
+    try{ const raw=localStorage.getItem('kakeibo_budget'); budgetData = raw ? JSON.parse(raw) : {targets:{},actuals:{}}; }
+    catch(e){ budgetData={targets:{},actuals:{}}; }
+  }else{
+    try{ const res=await apiGet({action:'getBudget'}); budgetData=(res && res.ok && res.budget) ? res.budget : {targets:{},actuals:{}}; }
+    catch(e){ budgetData={targets:{},actuals:{}}; }
   }
-  return '<div class="bcard'+(opts.isTotal?' total':'')+'">'+
-    '<div class="bhead"><span class="bname">'+esc(name)+'</span><span class="bpct">達成率 '+pct+'%</span></div>'+
-    '<div class="bbar"><i class="'+barCls+'" style="width:'+barW+'%"></i></div>'+
-    '<div class="bnums">'+
-      '<div class="bn"><span>目標</span><b>'+yen(target)+'</b></div>'+
-      '<div class="bn"><span>実績</span><b>'+yen(actual)+'</b></div>'+
-      '<div class="bn"><span>残り</span><b style="color:'+(remain<0?'var(--danger)':'var(--ok)')+'">'+yen(remain)+'</b></div>'+
-    '</div>'+ paceHtml + itemsHtml + '</div>';
+  if(!budgetData.targets) budgetData.targets={};
+  if(!budgetData.actuals) budgetData.actuals={};
+  budgetLoaded=true;
+}
+async function persistBudget(){
+  if(isDemo()){ try{ localStorage.setItem('kakeibo_budget', JSON.stringify(budgetData)); }catch(e){} return {ok:true}; }
+  return await api('setBudget', {budget: budgetData});
 }
 async function loadBudget(){
   document.getElementById('budgetMonth').textContent = monthLabel(state.currentMonth);
+  if(!budgetLoaded) await fetchBudget();
   const rows = await getRows(state.currentMonth);
   let exp=0, adv=0;
   rows.forEach(r=>{ if(r.kubun==='支出'){ exp+=r.amount; if(r.householdType==='会社立替') adv+=r.amount; } });
-  const rakutenActual = exp - adv; // 立替を除いた支出＝楽天カードのレシート実績
-  const [yy,mm]=state.currentMonth.split('-').map(Number);
-  const daysInMonth = new Date(yy, mm, 0).getDate();
-  const now = new Date();
-  const isCurrent = (monthKey(now)===state.currentMonth);
-  const elapsed = isCurrent ? now.getDate()/daysInMonth : 1;
-  const bank=BUDGET.g.bank.total, ins=BUDGET.g.insurance.total;
-  const totalActual = bank + ins + rakutenActual;
-  let h='';
-  h+=budgetCard('総予算（新目標）', BUDGET.total, totalActual, null, {isTotal:true});
-  h+=budgetCard(BUDGET.g.rakuten.name+'（レシートで管理）', BUDGET.g.rakuten.total, rakutenActual, BUDGET.g.rakuten.items, {pace:true, isCurrent:isCurrent, elapsed:elapsed});
-  h+=budgetCard(BUDGET.g.bank.name+'（固定・支払予定）', BUDGET.g.bank.total, bank, BUDGET.g.bank.items, {});
-  h+=budgetCard(BUDGET.g.insurance.name+'（固定）', BUDGET.g.insurance.total, ins, BUDGET.g.insurance.items, {});
-  document.getElementById('budgetBody').innerHTML = h;
-  document.getElementById('budgetNote').innerHTML =
-    '※ 楽天カードの実績＝アプリに記録した今月の支出（立替を除く）を自動集計しています。<br>'+
-    '※ 銀行引き落とし・保険は新目標の固定額で表示（支払予定どおりの想定）。金額を変えたいときは教えてください。';
+  budgetReceipt = exp - adv;
+  if(!state.budgetView) state.budgetView='check';
+  renderBudget();
+}
+function setBudgetView(v){ state.budgetView=v; state.budgetEdit=false; renderBudget(); }
+function toggleBudgetEdit(){ state.budgetEdit=!state.budgetEdit; renderBudget(); }
+function renderBudget(){
+  const seg='<div class="seg" style="margin-bottom:12px;">'+
+    '<button class="'+(state.budgetView!=='compare'?'on':'')+'" onclick="setBudgetView(\'check\')">今月の予算チェック</button>'+
+    '<button class="'+(state.budgetView==='compare'?'on':'')+'" onclick="setBudgetView(\'compare\')">旧→新の比較</button>'+
+    '</div>';
+  document.getElementById('budgetBody').innerHTML = seg + (state.budgetView==='compare' ? renderCompare() : renderCheck());
+  document.getElementById('budgetNote').innerHTML = '';
+}
+function bgroupCard(g, opts){
+  opts=opts||{};
+  let tsum=0, asum=0, rows='';
+  g.items.forEach(it=>{
+    const t=bTarget(it);
+    if(t==null && !state.budgetEdit) return; // 廃止項目は通常表示では隠す
+    const a=bActual(it.k);
+    if(t!=null){ tsum+=t; asum+=a; }
+    if(state.budgetEdit){
+      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs">'+
+        '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="t" placeholder="目標" value="'+(t==null?'':t)+'">'+
+        '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="a" placeholder="現状" value="'+(a||'')+'">'+
+      '</div></div>';
+    }else{
+      const rem=t-a;
+      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs">'+
+        '<span>目標</span><b>'+yen(t)+'</b><span>現状</span><b>'+yen(a)+'</b>'+
+        '<span>残</span><b style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+yen(rem)+'</b>'+
+      '</div></div>';
+    }
+  });
+  const pct = tsum>0 ? Math.round(asum/tsum*100) : 0;
+  let barCls='', pace='';
+  if(opts.pace && opts.isCurrent && !state.budgetEdit){
+    const ep=Math.round(opts.elapsed*100);
+    if((tsum>0?asum/tsum:0)<=opts.elapsed){ barCls='ok'; pace='<div class="bpace ok">順調：今日は月の'+ep+'%、予算の'+pct+'%を使用</div>'; }
+    else{ barCls='over'; pace='<div class="bpace over">ペース超過：今日は月の'+ep+'%なのに予算の'+pct+'%を使用</div>'; }
+  }else if(pct>100){ barCls='over'; }
+  const hdr=state.budgetEdit ? '<div class="bli bli-head"><div class="nm"></div><div class="vs"><em>目標</em><em>現状</em></div></div>' : '';
+  return '<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'<span class="bsub">（'+esc(g.note)+'）</span></span><span class="bpct">達成率 '+pct+'%</span></div>'+
+    '<div class="bbar"><i class="'+barCls+'" style="width:'+Math.max(0,Math.min(100,pct))+'%"></i></div>'+
+    '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(tsum)+'</b></div><div class="bn"><span>現状</span><b>'+yen(asum)+'</b></div><div class="bn"><span>残り</span><b style="color:'+((tsum-asum)<0?'var(--danger)':'var(--ok)')+'">'+yen(tsum-asum)+'</b></div></div>'+
+    pace+'<div class="bitems">'+hdr+rows+'</div></div>';
+}
+function renderCheck(){
+  const now=new Date(); const [yy,mm]=state.currentMonth.split('-').map(Number);
+  const dim=new Date(yy,mm,0).getDate();
+  const isCur=(monthKey(now)===state.currentMonth);
+  const elapsed=isCur ? now.getDate()/dim : 1;
+  let gt=0, ga=0;
+  BUDGET.groups.forEach(g=>g.items.forEach(it=>{ const t=bTarget(it); if(t!=null){ gt+=t; ga+=bActual(it.k); } }));
+  const pct=gt>0?Math.round(ga/gt*100):0;
+  let h='<div class="bcard total"><div class="bhead"><span class="bname">総予算（新目標）</span><span class="bpct">達成率 '+pct+'%</span></div>'+
+    '<div class="bbar"><i class="'+(pct>100?'over':'')+'" style="width:'+Math.min(100,pct)+'%"></i></div>'+
+    '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(gt)+'</b></div><div class="bn"><span>現状</span><b>'+yen(ga)+'</b></div><div class="bn"><span>残り</span><b style="color:'+((gt-ga)<0?'var(--danger)':'var(--ok)')+'">'+yen(gt-ga)+'</b></div></div></div>';
+  if(state.budgetEdit){
+    h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">キャンセル</button><button class="btn primary sm" style="flex:1" onclick="saveBudget()">保存する</button></div>';
+  }else{
+    h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">✏️ 目標・現状を編集</button></div>';
+  }
+  BUDGET.groups.forEach(g=>{ h+=bgroupCard(g, {pace:(g.key==='rakuten'), isCurrent:isCur, elapsed:elapsed}); });
+  h+='<p class="hint" style="margin-top:4px;line-height:1.7;">※今月アプリに記録した支出（立替を除く）: <b>'+yen(budgetReceipt)+'</b>（楽天カードの「現状」入力の参考にどうぞ）<br>'+
+     '※「編集」で各項目の目標・現状を入力して保存すると、夫婦どちらの端末にも反映されます。</p>';
+  return h;
+}
+function renderCompare(){
+  let h='<p class="hint" style="margin:0 0 10px;line-height:1.7;">旧目標と新目標の差です（新目標は編集後の値を反映）。<span style="color:var(--danger)">赤=増</span>／<span style="color:var(--ok)">緑=減</span>。</p>';
+  let go=0, gw=0;
+  BUDGET.groups.forEach(g=>{
+    let os=0, ws=0, rows='';
+    g.items.forEach(it=>{
+      const o=it.o||0; const w=bTarget(it);
+      os+=o; if(w!=null) ws+=w;
+      const d=(w==null?0:w)-o;
+      const wShow=(w==null)?'—':yen(w);
+      const dShow=(w==null)?('−'+yen(o)):((d>0?'+':(d<0?'−':''))+yen(Math.abs(d)));
+      const dCol=(d>0?'var(--danger)':(d<0?'var(--ok)':'var(--sub)'));
+      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs"><span>旧</span><b>'+yen(o)+'</b><span>新</span><b>'+wShow+'</b><span>差</span><b style="color:'+dCol+'">'+dShow+'</b></div></div>';
+    });
+    go+=os; gw+=ws; const gd=ws-os;
+    h+='<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'</span><span class="bpct" style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">差 '+(gd>0?'+':'')+yen(gd)+'</span></div>'+
+      '<div class="bnums"><div class="bn"><span>旧目標</span><b>'+yen(os)+'</b></div><div class="bn"><span>新目標</span><b>'+yen(ws)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div>'+
+      '<div class="bitems">'+rows+'</div></div>';
+  });
+  const gd=gw-go;
+  h+='<div class="bcard total"><div class="bhead"><span class="bname">合計</span><span class="bpct" style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">差 '+(gd>0?'+':'')+yen(gd)+'</span></div>'+
+     '<div class="bnums"><div class="bn"><span>旧目標</span><b>'+yen(go)+'</b></div><div class="bn"><span>新目標</span><b>'+yen(gw)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div></div>';
+  return h;
+}
+async function saveBudget(){
+  const m=state.currentMonth;
+  if(!budgetData.targets) budgetData.targets={};
+  if(!budgetData.actuals) budgetData.actuals={};
+  if(!budgetData.actuals[m]) budgetData.actuals[m]={};
+  document.querySelectorAll('#budgetBody input[data-bk]').forEach(inp=>{
+    const k=inp.dataset.bk, t=inp.dataset.bt;
+    const raw=inp.value.trim();
+    const v = raw==='' ? null : Number(raw);
+    if(t==='t'){ if(v==null) delete budgetData.targets[k]; else budgetData.targets[k]=v; }
+    else { if(v==null || v===0) delete budgetData.actuals[m][k]; else budgetData.actuals[m][k]=v; }
+  });
+  showOverlay('保存中…');
+  try{
+    const res=await persistBudget();
+    hideOverlay();
+    if(res && res.ok===false){ alert('保存に失敗しました：\n'+res.error); return; }
+    state.budgetEdit=false;
+    renderBudget();
+    toast('保存しました ✅');
+  }catch(e){ hideOverlay(); alert('エラー：'+e); }
 }
 
 /* ===================== 月移動 ===================== */
