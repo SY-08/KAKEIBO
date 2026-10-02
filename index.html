@@ -122,7 +122,7 @@
   .tabbar button .i{font-size:21px;}
   .tabbar button.on{color:var(--orange);}
 
-  .demo-badge{background:#fff4e5; color:#8a5a00; font-size:11px; text-align:center; padding:5px; border-bottom:1px solid #ffd48a;}
+  .demo-badge{background:var(--danger); color:#fff; font-size:13px; font-weight:700; text-align:center; padding:9px 12px; line-height:1.55; border-bottom:2px solid #b5362c;}
   .hint{font-size:11.5px; color:var(--sub); margin:4px 2px 0;}
   .hidden{display:none!important;}
   a{color:var(--orange);}
@@ -158,14 +158,13 @@
   .bitem{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0;}
   .bitem.zero{color:#bbb;}
   .bhead .bsub{font-size:11px; color:var(--sub); font-weight:400; margin-left:2px;}
-  .bli{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #f3f1ee; font-size:12.5px;}
-  .bli .nm{flex:1; min-width:0; font-weight:600;}
-  .bli .vs{display:flex; gap:7px; align-items:center; white-space:nowrap;}
-  .bli .vs span{color:var(--sub); font-size:10px;}
-  .bli .vs b{font-weight:600;}
-  .bli .vs em{color:var(--sub); font-size:10px; font-style:normal; width:76px; text-align:center; display:inline-block;}
-  .bli.bli-head{padding:2px 0; border-top:none;}
-  .bli .vs input{width:76px; padding:5px 6px; font-size:12px; text-align:right; border:1.5px solid var(--line); border-radius:7px; background:#fff;}
+  .bli{display:grid; grid-template-columns:minmax(0,1.4fr) 1fr 1fr 1fr; column-gap:4px; align-items:center; padding:5px 0; border-top:1px solid #f3f1ee; font-size:11.5px;}
+  .bli.e{grid-template-columns:minmax(0,1.4fr) 1fr 1fr;}
+  .bli .nm{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
+  .bli .v{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .bli.bli-head{padding:4px 0 4px; border-top:none; color:var(--sub); font-size:10px; font-weight:700;}
+  .bli.bli-head .v{color:var(--sub);}
+  .bli input{width:100%; min-width:0; padding:5px 4px; font-size:12px; text-align:right; border:1.5px solid var(--line); border-radius:7px; background:#fff; font-variant-numeric:tabular-nums;}
   .bedit-actions{display:flex; gap:8px; margin:4px 0 12px;}
   .btn.sm{padding:9px 12px; font-size:13px;}
   .calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:8px;}
@@ -207,7 +206,7 @@
 </head>
 <body>
 <div class="app">
-  <div id="demoBadge" class="demo-badge hidden">デモモード（設定でGASのURLを登録すると本番接続になります）</div>
+  <div id="demoBadge" class="demo-badge hidden">⚠️ デモモード：表示されている数字は偽のサンプルです（実際のデータではありません）。<br>「⚙️設定」でGASのURLと合言葉を入れて保存すると、本番データ（横塚家_DB）に接続します。</div>
   <div class="content">
   <header>
     <div class="hleft">
@@ -971,16 +970,16 @@ function bgroupCard(g, opts){
     const a=bActual(it.k);
     if(t!=null){ tsum+=t; asum+=a; }
     if(state.budgetEdit){
-      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs">'+
+      rows+='<div class="bli e"><span class="nm">'+esc(it.n)+'</span>'+
         '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="t" placeholder="目標" value="'+(t==null?'':t)+'">'+
         '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="a" placeholder="現状" value="'+(a||'')+'">'+
-      '</div></div>';
+      '</div>';
     }else{
       const rem=t-a;
-      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs">'+
-        '<span>目標</span><b>'+yen(t)+'</b><span>現状</span><b>'+yen(a)+'</b>'+
-        '<span>残</span><b style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+yen(rem)+'</b>'+
-      '</div></div>';
+      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'</span>'+
+        '<span class="v">'+yc(t)+'</span><span class="v">'+yc(a)+'</span>'+
+        '<span class="v" style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+yc(rem)+'</span>'+
+      '</div>';
     }
   });
   const pct = tsum>0 ? Math.round(asum/tsum*100) : 0;
@@ -990,7 +989,9 @@ function bgroupCard(g, opts){
     if((tsum>0?asum/tsum:0)<=opts.elapsed){ barCls='ok'; pace='<div class="bpace ok">順調：今日は月の'+ep+'%、予算の'+pct+'%を使用</div>'; }
     else{ barCls='over'; pace='<div class="bpace over">ペース超過：今日は月の'+ep+'%なのに予算の'+pct+'%を使用</div>'; }
   }else if(pct>100){ barCls='over'; }
-  const hdr=state.budgetEdit ? '<div class="bli bli-head"><div class="nm"></div><div class="vs"><em>目標</em><em>現状</em></div></div>' : '';
+  const hdr=state.budgetEdit
+    ? '<div class="bli e bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状</span></div>'
+    : '<div class="bli bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状</span><span class="v">残り</span></div>';
   return '<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'<span class="bsub">（'+esc(g.note)+'）</span></span><span class="bpct">達成率 '+pct+'%</span></div>'+
     '<div class="bbar"><i class="'+barCls+'" style="width:'+Math.max(0,Math.min(100,pct))+'%"></i></div>'+
     '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(tsum)+'</b></div><div class="bn"><span>現状</span><b>'+yen(asum)+'</b></div><div class="bn"><span>残り</span><b style="color:'+((tsum-asum)<0?'var(--danger)':'var(--ok)')+'">'+yen(tsum-asum)+'</b></div></div>'+
@@ -1021,15 +1022,15 @@ function renderCompare(){
   let h='<p class="hint" style="margin:0 0 10px;line-height:1.7;">旧目標と新目標の差です（新目標は編集後の値を反映）。<span style="color:var(--danger)">赤=増</span>／<span style="color:var(--ok)">緑=減</span>。</p>';
   let go=0, gw=0;
   BUDGET.groups.forEach(g=>{
-    let os=0, ws=0, rows='';
+    let os=0, ws=0, rows='<div class="bli bli-head"><span class="nm">項目</span><span class="v">旧目標</span><span class="v">新目標</span><span class="v">差</span></div>';
     g.items.forEach(it=>{
       const o=it.o||0; const w=bTarget(it);
       os+=o; if(w!=null) ws+=w;
       const d=(w==null?0:w)-o;
-      const wShow=(w==null)?'—':yen(w);
-      const dShow=(w==null)?('−'+yen(o)):((d>0?'+':(d<0?'−':''))+yen(Math.abs(d)));
+      const wShow=(w==null)?'—':yc(w);
+      const dShow=(w==null)?('−'+yc(o)):((d>0?'+':(d<0?'−':''))+yc(Math.abs(d)));
       const dCol=(d>0?'var(--danger)':(d<0?'var(--ok)':'var(--sub)'));
-      rows+='<div class="bli"><div class="nm">'+esc(it.n)+'</div><div class="vs"><span>旧</span><b>'+yen(o)+'</b><span>新</span><b>'+wShow+'</b><span>差</span><b style="color:'+dCol+'">'+dShow+'</b></div></div>';
+      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'</span><span class="v">'+yc(o)+'</span><span class="v">'+wShow+'</span><span class="v" style="color:'+dCol+'">'+dShow+'</span></div>';
     });
     go+=os; gw+=ws; const gd=ws-os;
     h+='<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'</span><span class="bpct" style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">差 '+(gd>0?'+':'')+yen(gd)+'</span></div>'+
@@ -1171,6 +1172,7 @@ function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart
 function monthLabel(k){ const [y,m]=k.split('-'); return y+'年'+m+'月'; }
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function yen(n){ return (Number(n)||0).toLocaleString('ja-JP')+'円'; }
+function yc(n){ return '¥'+(Number(n)||0).toLocaleString('ja-JP'); }
 function short(n){ n=Number(n)||0; return n>=10000 ? (Math.round(n/1000)/10)+'万' : n.toLocaleString('ja-JP'); }
 function dayLabel(ds){ const [y,m,d]=ds.split('-').map(Number); const w=['日','月','火','水','木','金','土'][new Date(y,m-1,d).getDay()]; return m+'月'+d+'日('+w+')'; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
