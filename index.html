@@ -100,7 +100,8 @@
             border-top:2px solid #eee; border-bottom:1px solid var(--line); font-weight:700; font-size:16px;}
   .catline{display:flex; align-items:center; gap:11px; padding:12px 4px; border-bottom:1px solid var(--line); cursor:pointer;}
   .catline .name{flex:1; font-size:14px;}
-  .catline .v{font-weight:700; font-size:14px;}
+  .catline .pct{font-size:12px; font-weight:700; color:var(--sub); min-width:42px; text-align:right; font-variant-numeric:tabular-nums;}
+  .catline .v{font-weight:700; font-size:14px; min-width:78px; text-align:right; font-variant-numeric:tabular-nums;}
   .catline .chev{color:#ccc; font-size:14px;}
 
   .empty{text-align:center; color:var(--sub); padding:34px 10px; font-size:13px;}
@@ -165,6 +166,9 @@
   .bli.bli-head{padding:4px 0 4px; border-top:none; color:var(--sub); font-size:10px; font-weight:700;}
   .bli.bli-head .v{color:var(--sub);}
   .bli input{width:100%; min-width:0; padding:5px 4px; font-size:12px; text-align:right; border:1.5px solid var(--line); border-radius:7px; background:#fff; font-variant-numeric:tabular-nums;}
+  .bli .v.auto{color:var(--ok);}
+  .bli .v.auto small{display:block; font-size:8.5px; color:var(--sub); font-weight:600; line-height:1;}
+  .autotag{display:inline-block; font-size:8.5px; font-weight:700; color:#fff; background:var(--ok); border-radius:4px; padding:1px 4px; margin-left:5px; vertical-align:middle;}
   .bedit-actions{display:flex; gap:8px; margin:4px 0 12px;}
   .btn.sm{padding:9px 12px; font-size:13px;}
   .calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:8px;}
@@ -853,9 +857,10 @@ async function loadChart(){
   showCats.forEach(c=>{
     const v = sums[c]||0;
     const div=document.createElement('div');
+    const pct = total>0 ? Math.round(v/total*100) : 0;
     div.className='catline';
     div.innerHTML='<span class="dot" style="background:'+colorFor(c)+'"></span>'+
-      '<span class="name">'+esc(c)+'</span><span class="v">'+yen(v)+'</span><span class="chev">›</span>';
+      '<span class="name">'+esc(c)+'</span><span class="pct">'+pct+'%</span><span class="v">'+yen(v)+'</span><span class="chev">›</span>';
     catList.appendChild(div);
   });
 }
@@ -921,6 +926,16 @@ const BUDGET = {
 let budgetData = { targets:{}, actuals:{} };
 let budgetLoaded = false;
 let budgetReceipt = 0;
+// レシートの支出項目 → 楽天カードの予算項目 への対応（自動集計）
+const RECEIPT_MAP = { '食費':'shoku', '外食費':'gaishoku', '日用品':'nichiyo', '生活用品・雑貨':'nichiyo', 'ガソリン・交通費':'kotsu' };
+const AUTO_ITEMS = new Set(Object.values(RECEIPT_MAP)); // 自動で現状が入る楽天カード項目
+let receiptAuto = {}; // itemKey -> 今月のレシート合計
+let receiptMisc = 0;  // 上記に当てはまらないレシート（その他・衣服代・医療費など）の合計
+// 楽天カード項目の現状（自動項目はレシートから、それ以外は手入力）
+function itemActual(groupKey, it){
+  if(groupKey==='rakuten' && AUTO_ITEMS.has(it.k)) return receiptAuto[it.k]||0;
+  return bActual(it.k);
+}
 
 function bTarget(it){ if(budgetData.targets && budgetData.targets[it.k]!=null) return Number(budgetData.targets[it.k]); return (it.w!=null ? it.w : null); }
 function bActual(k){ const m=state.currentMonth; const a=budgetData.actuals && budgetData.actuals[m]; return (a && a[k]!=null) ? Number(a[k]) : 0; }
@@ -945,9 +960,17 @@ async function loadBudget(){
   document.getElementById('budgetMonth').textContent = monthLabel(state.currentMonth);
   if(!budgetLoaded) await fetchBudget();
   const rows = await getRows(state.currentMonth);
-  let exp=0, adv=0;
-  rows.forEach(r=>{ if(r.kubun==='支出'){ exp+=r.amount; if(r.householdType==='会社立替') adv+=r.amount; } });
-  budgetReceipt = exp - adv;
+  let exp=0;
+  receiptAuto={}; receiptMisc=0;
+  rows.forEach(r=>{
+    if(r.kubun!=='支出') return;
+    if(r.householdType==='会社立替') return; // 立替は家計の現状に含めない
+    exp += r.amount;
+    const tgt = RECEIPT_MAP[r.category||'その他'];
+    if(tgt) receiptAuto[tgt] = (receiptAuto[tgt]||0) + r.amount;
+    else receiptMisc += r.amount;
+  });
+  budgetReceipt = exp; // 立替を除いた今月の支出合計（＝楽天カードの現状合計）
   if(!state.budgetView) state.budgetView='check';
   renderBudget();
 }
@@ -963,25 +986,38 @@ function renderBudget(){
 }
 function bgroupCard(g, opts){
   opts=opts||{};
+  const autoG = g.key==='rakuten';
   let tsum=0, asum=0, rows='';
   g.items.forEach(it=>{
     const t=bTarget(it);
     if(t==null && !state.budgetEdit) return; // 廃止項目は通常表示では隠す
-    const a=bActual(it.k);
+    const isAuto = autoG && AUTO_ITEMS.has(it.k);
+    const a=itemActual(g.key, it);
     if(t!=null){ tsum+=t; asum+=a; }
     if(state.budgetEdit){
+      const actualCell = isAuto
+        ? '<span class="v auto">'+yc(a)+'<small>自動</small></span>'
+        : '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="a" placeholder="現状" value="'+(a||'')+'">';
       rows+='<div class="bli e"><span class="nm">'+esc(it.n)+'</span>'+
         '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="t" placeholder="目標" value="'+(t==null?'':t)+'">'+
-        '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="a" placeholder="現状" value="'+(a||'')+'">'+
-      '</div>';
+        actualCell+'</div>';
     }else{
       const rem=t-a;
-      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'</span>'+
+      rows+='<div class="bli"><span class="nm">'+esc(it.n)+(isAuto?'<span class="autotag">自動</span>':'')+'</span>'+
         '<span class="v">'+yc(t)+'</span><span class="v">'+yc(a)+'</span>'+
         '<span class="v" style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+yc(rem)+'</span>'+
       '</div>';
     }
   });
+  // 楽天カード：どの項目にも割り当たらないレシート（衣服代・医療費・その他など）
+  if(autoG && (receiptMisc>0 || state.budgetEdit)){
+    asum += receiptMisc;
+    if(state.budgetEdit){
+      rows+='<div class="bli e"><span class="nm">その他（レシート分）</span><span class="v" style="color:var(--sub)">—</span><span class="v auto">'+yc(receiptMisc)+'<small>自動</small></span></div>';
+    }else{
+      rows+='<div class="bli"><span class="nm">その他（レシート分）<span class="autotag">自動</span></span><span class="v" style="color:var(--sub)">—</span><span class="v">'+yc(receiptMisc)+'</span><span class="v">—</span></div>';
+    }
+  }
   const pct = tsum>0 ? Math.round(asum/tsum*100) : 0;
   let barCls='', pace='';
   if(opts.pace && opts.isCurrent && !state.budgetEdit){
@@ -1003,7 +1039,7 @@ function renderCheck(){
   const isCur=(monthKey(now)===state.currentMonth);
   const elapsed=isCur ? now.getDate()/dim : 1;
   let gt=0, ga=0;
-  BUDGET.groups.forEach(g=>g.items.forEach(it=>{ const t=bTarget(it); if(t!=null){ gt+=t; ga+=bActual(it.k); } }));
+  BUDGET.groups.forEach(g=>{ g.items.forEach(it=>{ const t=bTarget(it); if(t!=null){ gt+=t; ga+=itemActual(g.key, it); } }); if(g.key==='rakuten') ga+=receiptMisc; });
   const pct=gt>0?Math.round(ga/gt*100):0;
   let h='<div class="bcard total"><div class="bhead"><span class="bname">総予算（新目標）</span><span class="bpct">達成率 '+pct+'%</span></div>'+
     '<div class="bbar"><i class="'+(pct>100?'over':'')+'" style="width:'+Math.min(100,pct)+'%"></i></div>'+
@@ -1014,8 +1050,8 @@ function renderCheck(){
     h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">✏️ 目標・現状を編集</button></div>';
   }
   BUDGET.groups.forEach(g=>{ h+=bgroupCard(g, {pace:(g.key==='rakuten'), isCurrent:isCur, elapsed:elapsed}); });
-  h+='<p class="hint" style="margin-top:4px;line-height:1.7;">※今月アプリに記録した支出（立替を除く）: <b>'+yen(budgetReceipt)+'</b>（楽天カードの「現状」入力の参考にどうぞ）<br>'+
-     '※「編集」で各項目の目標・現状を入力して保存すると、夫婦どちらの端末にも反映されます。</p>';
+  h+='<p class="hint" style="margin-top:4px;line-height:1.7;">※楽天カードの「<b>自動</b>」項目（食費・外食費・日用品・交通費など）は、レシートを登録するとリアルタイムで現状に反映されます（今月の記録合計 '+yen(budgetReceipt)+'）。<br>'+
+     '※水道・ガス・サブスクなどの固定費や、銀行引き落とし・保険は「✏️編集」で手入力できます（保存すると夫婦で共有）。</p>';
   return h;
 }
 function renderCompare(){
