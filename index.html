@@ -191,6 +191,14 @@
   .bremain{font-size:13px; font-weight:800; white-space:nowrap;}
   .bremain.ok{color:var(--ok);}
   .bremain.over{color:var(--danger);}
+  .bremain.fix{color:var(--sub); font-weight:700;}
+  .bcard.varcard{border-color:var(--orange); border-width:1.5px;}
+  .bcard.fixedcard{background:#faf9f7;}
+  .fixtag{display:inline-block; font-size:8.5px; font-weight:700; color:#fff; background:#b3aca2; border-radius:4px; padding:1px 4px; margin-left:5px; vertical-align:middle;}
+  .catline .fixtag{margin-left:4px;}
+  .vsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; padding-top:9px; border-top:1px dashed var(--line); flex-wrap:wrap;}
+  .vsummary .vs-l span{display:block; font-size:10.5px; color:var(--sub);}
+  .vsummary .vs-l b{font-size:12.5px;}
   .bli .icell{display:flex; flex-direction:column; align-items:flex-end; gap:1px;}
   .bli .icell small{font-size:8.5px; color:var(--ok); font-weight:600; line-height:1;}
   /* 予算：その他の内訳トグル */
@@ -365,10 +373,14 @@
 
   <!-- ============ グラフ ============ -->
   <section id="scr-chart" class="screen">
-    <div class="seg" style="margin-bottom:14px;">
+    <div class="seg" style="margin-bottom:10px;">
       <button class="on" data-k="支出" onclick="setChartKubun('支出')">支出</button>
       <button data-k="収入" onclick="setChartKubun('収入')">収入</button>
       <button data-k="資産" onclick="setChartKubun('資産')">資産</button>
+    </div>
+    <div class="seg small" id="expenseModeSeg" style="margin-bottom:14px;">
+      <button class="on" data-m="var" onclick="setExpenseMode('var')">変動費のみ</button>
+      <button data-m="all" onclick="setExpenseMode('all')">全体（固定費込み）</button>
     </div>
     <div class="monthnav">
       <button onclick="changeMonth(-1,'chart')">◀</button>
@@ -462,77 +474,79 @@
 const EVENT_CAT = '特別費（イベント）';
 const EVENT_INCOME_CAT = '特別収入（臨時）';
 
-// 予算（新目標）定義。CATEGORIES・RECEIPT_MAP はこの定義から自動生成する。
-// 各項目 { k:キー, n:名称, o:旧目標, w:新目標(初期値。null=新目標では廃止) }
+// 予算（最新版ベストシナリオ 2026-10）定義。CATEGORIES・RECEIPT_MAP はこの定義から自動生成する。
+// group.fixed=true → 毎月固定（現状=目標、記入は固定化）。group.variable=true → レシートで管理（現状を追う）。
+// 各項目 { k:キー, n:名称, w:月予算, sub?:内訳 }
 const BUDGET = {
   groups: [
-    { key:'rakuten', name:'楽天カード', note:'レシートで管理', items:[
-      {k:'suido',n:'水道代',o:5717,w:5717},
-      {k:'gas',n:'ガス代',o:8000,w:8000},
-      {k:'denki',n:'電気代',o:10000,w:10000},
-      {k:'net',n:'ネット代',o:6000,w:6000},
-      {k:'keitai',n:'携帯代',o:20000,w:20000},
-      {k:'gasorin',n:'ガソリン代',o:15000,w:0},
-      {k:'subsc',n:'サブスク・デジタル費',o:4000,w:20654},
-      {k:'office',n:'Word・Excel代',o:1284,w:1284},
-      {k:'clothH',n:'旦那 衣服代',o:10000,w:10000},
-      {k:'clothW',n:'嫁 衣服代',o:10000,w:10000},
-      {k:'kosodate',n:'娘 子育て費用全般',o:30000,w:null},
-      {k:'clothK',n:'子ども衣類',o:0,w:10000},
-      {k:'rougo',n:'夫婦 老後資金積立（投信）',o:50000,w:50000},
-      {k:'shoku',n:'食費',o:51000,w:40000},
-      {k:'gaishoku',n:'外食費',o:0,w:30000},
-      {k:'nespresso',n:'ネスプレッソ',o:4000,w:0},
-      {k:'nichiyo',n:'日用品',o:10000,w:10000},
-      {k:'kotsu',n:'交通費',o:0,w:10000},
-      {k:'granberry',n:'グランベリー費',o:0,w:12500},
-      {k:'leisure',n:'レジャー費',o:0,w:20000},
-      {k:'iro',n:'いろちゃん',o:0,w:10000},
-      {k:'iryo',n:'医療費',o:0,w:5000}
+    { key:'rakutenFixed', name:'楽天カード（固定費）', note:'毎月固定・予算どおり', fixed:true, items:[
+      {k:'suido',n:'水道代',w:5717},
+      {k:'gas',n:'ガス代',w:8000},
+      {k:'denki',n:'電気代',w:10000},
+      {k:'net',n:'ネット代',w:6000},
+      {k:'keitai',n:'携帯代',w:20000},
+      {k:'subsc',n:'サブスク・デジタル代',w:18463, sub:[
+        'LINEマンガ（Google Play） ¥2,000','Claude ¥3,613','ChatGPT Plus ¥3,000','U-NEXT サッカーパック ¥3,000',
+        'Google Workspace ¥2,090','Netflix ¥1,190','Canva ¥1,180','Money Forward ME ¥590','iCloud 2TB ¥1,800']},
+      {k:'clothH',n:'旦那 衣服代',w:10000},
+      {k:'clothW',n:'妻 衣服代',w:10000},
+      {k:'rougo',n:'夫婦 老後資金積立',w:52000},
+      {k:'kyoiku',n:'娘 教育資金積立',w:30000},
+      {k:'kotsu',n:'交通費',w:10000}
     ]},
-    { key:'bank', name:'銀行引き落とし', note:'固定・支払予定', items:[
-      {k:'loanH',n:'住宅ローン（旦那）',o:115000,w:118000},
-      {k:'kanri',n:'管理費・修繕費',o:3000,w:3000},
-      {k:'shogaku',n:'奨学金返済',o:17331,w:17331},
-      {k:'paypay',n:'旦那 PayPayカード（小遣い）',o:20000,w:20000},
-      {k:'okozukaiW',n:'嫁 お小遣い',o:20000,w:20000},
-      {k:'kyoiku',n:'娘 教育資金積立（投信）',o:30000,w:30000},
-      {k:'hoikuen',n:'娘 保育園代',o:5000,w:6350},
-      {k:'tokei',n:'旦那 時計代（JACCS）',o:0,w:5400},
-      {k:'ecc',n:'ECC',o:0,w:12650},
-      {k:'piano',n:'ピアノ',o:0,w:8000},
-      {k:'dance',n:'ダンス',o:0,w:15000}
+    { key:'rakutenVar', name:'楽天カード（変動費）', note:'ここを日々レシートで管理', variable:true, items:[
+      {k:'shoku',n:'食費',w:40000},
+      {k:'gaishoku',n:'外食費',w:30000},
+      {k:'nichiyo',n:'日用品',w:10000},
+      {k:'gacha',n:'ガチャ／UFO費',w:12500},
+      {k:'leisure',n:'レジャー費',w:20000},
+      {k:'iro',n:'いろちゃん',w:10000},
+      {k:'iryo',n:'医療費',w:0},
+      {k:'etc',n:'その他',w:0}
     ]},
-    { key:'insurance', name:'不定期費用・保険', note:'固定', items:[
-      {k:'kasai',n:'火災保険・地震保険',o:3333,w:3333},
-      {k:'kotei',n:'固定資産税',o:6500,w:6500},
-      {k:'iryoH',n:'旦那 医療保険',o:1000,w:null},
-      {k:'hoken',n:'保険費用（夫婦合計）',o:0,w:10000}
+    { key:'bank', name:'銀行引き落とし', note:'毎月固定・予算どおり', fixed:true, items:[
+      {k:'loanH',n:'住宅ローン',w:118000},
+      {k:'kanri',n:'管理費・修繕費',w:3000},
+      {k:'shogaku',n:'奨学金返済',w:17331},
+      {k:'paypay',n:'旦那 PayPayカード（小遣い）',w:20000},
+      {k:'okozukaiW',n:'妻 お小遣い',w:20000},
+      {k:'hoikuen',n:'娘 保育園代',w:6350},
+      {k:'tokei',n:'旦那 時計代（JACCS）',w:5400},
+      {k:'ecc',n:'ECC',w:12650},
+      {k:'piano',n:'ピアノ',w:8000},
+      {k:'dance',n:'ダンス',w:15000}
+    ]},
+    { key:'insurance', name:'不定期費用・保険', note:'毎月固定・予算どおり', fixed:true, items:[
+      {k:'kasai',n:'火災保険・地震保険',w:3333},
+      {k:'kotei',n:'固定資産税',w:6500},
+      {k:'hoken',n:'保険費用（夫婦合計）',w:10000}
     ]}
   ]
 };
+// 変動費（＝日々管理する）項目キー
+const VARIABLE_KEYS = new Set(BUDGET.groups.filter(g=>g.variable).flatMap(g=>g.items.map(i=>i.k)));
+function groupOf(key){ return BUDGET.groups.find(g=>g.items.some(i=>i.k===key)); }
 
-// レシートの支出項目 → 予算項目キー への対応（この対応がある項目はレシート登録で自動集計）
+// レシートの支出項目 → 予算項目キー への対応。変動費キーに当たればそこへ自動集計、
+// 固定費キー（衣服・交通など）に当たれば記録のみ（予算は固定）、該当なしは その他(変動) へ。
 const RECEIPT_MAP = {
   '食費':'shoku','外食費':'gaishoku','日用品':'nichiyo','生活用品・雑貨':'nichiyo',
-  'ガソリン・交通費':'kotsu','交通費':'kotsu','ガソリン代':'gasorin',
-  'いろちゃん':'iro','医療費':'iryo',
-  '旦那 衣服代':'clothH','嫁 衣服代':'clothW','衣服代':'clothW','子ども衣類':'clothK',
-  'レジャー費':'leisure','グランベリー費':'granberry','ネスプレッソ':'nespresso'
+  'いろちゃん':'iro','医療費':'iryo','レジャー費':'leisure',
+  'ガチャ／UFO費':'gacha','グランベリー費':'gacha','その他':'etc',
+  '旦那 衣服代':'clothH','妻 衣服代':'clothW','嫁 衣服代':'clothW','衣服代':'clothW',
+  'ガソリン・交通費':'kotsu','交通費':'kotsu','ガソリン代':'kotsu'
 };
-const AUTO_ITEMS = new Set(Object.values(RECEIPT_MAP)); // レシートから自動で現状に入る予算キー
 
-// 入力時に選べる支出項目（楽天カード＝日々のレシートで管理する項目を中心に）
-const CATEGORIES = ['食費','外食費','日用品','生活用品・雑貨','ガソリン・交通費','交通費',
-  'いろちゃん','医療費','旦那 衣服代','嫁 衣服代','子ども衣類','レジャー費','グランベリー費','ネスプレッソ',
-  EVENT_CAT,'その他','会社の立替金'];
+// 入力時に選べる支出項目（日々のレシート＝変動費中心。衣服・交通は記録用に残す）
+const CATEGORIES = ['食費','外食費','日用品','ガチャ／UFO費','レジャー費','いろちゃん','医療費',
+  '旦那 衣服代','妻 衣服代','交通費', EVENT_CAT,'その他','会社の立替金'];
 
 // カテゴリー色（グラフ・一覧で共通）。未定義の項目はキーから自動生成。
 const CAT_COLORS = {
   '食費':'#ff8f8f','外食費':'#8fd48f','いろちゃん':'#ffc0d9','日用品':'#ffd27f',
-  '生活用品・雑貨':'#c9a7e6','光熱費':'#ffb0a0','ガソリン・交通費':'#b7d98f','交通費':'#b7d98f',
-  '医療費':'#7fd6c0','衣服代':'#9fb8e6','旦那 衣服代':'#9fb8e6','嫁 衣服代':'#b6a6e8','子ども衣類':'#c7d3f2',
-  '通信費':'#8a8ab0','レジャー費':'#ffcf6b','グランベリー費':'#f6a6c1','ネスプレッソ':'#c98a6b',
+  'ガチャ／UFO費':'#c9a7e6','レジャー費':'#ffcf6b','医療費':'#7fd6c0',
+  '旦那 衣服代':'#9fb8e6','妻 衣服代':'#b6a6e8','嫁 衣服代':'#b6a6e8','交通費':'#b7d98f',
+  'ガソリン・交通費':'#b7d98f',
   [EVENT_CAT]:'#b05ad6','その他':'#e8dcc8','会社の立替金':'#ffa94d'
 };
 function autoColor(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))%360; return 'hsl('+h+',52%,68%)'; }
@@ -555,7 +569,7 @@ let state = {
   chart: null,
   editingId: null, // 編集中の取引ID（新規登録時は null）
   chartOpen: new Set(), // グラフ内訳で開いている項目
-  budgetView: 'check',
+  expenseMode: 'var',   // 支出グラフ: 'var'=変動費のみ / 'all'=全体
   budgetEdit: false,
   assetEdit: false,
 };
@@ -994,39 +1008,67 @@ const donutLabelPlugin = {
     });
   }
 };
+function setExpenseMode(m){
+  state.expenseMode=m; state.chartOpen=new Set();
+  document.querySelectorAll('#expenseModeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+  loadChart();
+}
 let chartGroups=[]; // [{label,value,color,rows:[...]}]（内訳表示用）
 async function loadChart(){
   document.getElementById('chartMonth').textContent = monthLabel(state.currentMonth);
   if(!budgetLoaded) await fetchBudget();
   const rows = await getRows(state.currentMonth);
   const k=state.chartKubun;
-  const groupMap={}; // label -> {value, rows}
-  const push=(label,amount,row)=>{ const g=groupMap[label]||(groupMap[label]={value:0,rows:[]}); g.value+=amount; if(row) g.rows.push(row); };
+  const modeSeg=document.getElementById('expenseModeSeg');
+  if(modeSeg) modeSeg.style.display = (k==='支出') ? '' : 'none';
 
-  if(k==='資産'){
-    // 口座残高の内訳（本体＝合計対象の口座）
-    ASSETS.main.forEach(ac=>{ const bal=assetBalance(ac); push(ac.name+'（'+ac.owner+'）', bal, {store:ac.name, date:ac.owner, amount:bal}); });
-  }else if(k==='収入'){
-    // 収入は資産タブで入力した今月の収入から集計
-    const inc=assetIncome(state.currentMonth);
-    inc.forEach(e=>push(e.name||'収入', Number(e.amount)||0, {store:e.name||'収入', date:e.who||'', amount:Number(e.amount)||0}));
-    rows.filter(r=>r.kubun==='収入').forEach(r=>push(r.category||r.store||'収入', r.amount, r));
-  }else{
-    rows.filter(r=>r.kubun==='支出').forEach(r=>push(r.category||'その他', r.amount, r));
+  if(k==='支出'){
+    // 変動費の実績をキー別に集計（立替・特別費は除外、固定費項目のレシートは変動費には入れない）
+    const varActual={}, varRows={};
+    rows.forEach(r=>{
+      if(r.kubun!=='支出' || r.householdType==='会社立替' || (r.category||'')===EVENT_CAT) return;
+      const key=RECEIPT_MAP[r.category||'その他'];
+      const vk = (key && VARIABLE_KEYS.has(key)) ? key : (key ? null : 'etc');
+      if(vk){ varActual[vk]=(varActual[vk]||0)+r.amount; (varRows[vk]=varRows[vk]||[]).push(r); }
+    });
+    if(state.expenseMode==='all'){
+      // 全一覧：固定費は予算どおりの金額、変動費は実績
+      chartGroups=[];
+      BUDGET.groups.forEach(g=>g.items.forEach(it=>{
+        const val = g.variable ? (varActual[it.k]||0) : it.w;
+        const rws = g.variable ? (varRows[it.k]||[]) : (it.sub? it.sub.map(s=>({store:s,amount:null})) : []);
+        chartGroups.push({label:it.n, value:val, color:colorFor(it.n), rows:rws, fixed:!!g.fixed});
+      }));
+    }else{
+      // 変動費のみ（日々管理する部分）
+      const vg=BUDGET.groups.find(g=>g.variable);
+      chartGroups = vg.items.map(it=>({label:it.n, value:varActual[it.k]||0, color:colorFor(it.n), rows:varRows[it.k]||[]}));
+    }
+    const total=chartGroups.reduce((a,g)=>a+g.value,0);
+    document.getElementById('centerLbl').textContent = state.expenseMode==='all'?'支出 全体':'支出 変動費';
+    document.getElementById('centerVal').textContent = yen(total);
+    document.getElementById('chartTotal').textContent = yen(total);
+    renderCatList(total);
+    const nz=chartGroups.filter(g=>g.value>0);
+    try{ drawDonut(nz.map(g=>g.label), nz.map(g=>g.value), nz.map(g=>g.color)); }catch(e){ console.warn('chart draw failed', e); }
+    return;
   }
 
-  // 並び順：支出はカテゴリー定義順、それ以外は金額降順
-  let labels=Object.keys(groupMap);
-  if(k==='支出'){ labels.sort((a,b)=> (CATEGORIES.indexOf(a)+1||99)-(CATEGORIES.indexOf(b)+1||99)); }
-  else{ labels.sort((a,b)=>groupMap[b].value-groupMap[a].value); }
-
+  // 収入・資産
+  const groupMap={};
+  const push=(label,amount,row)=>{ const g=groupMap[label]||(groupMap[label]={value:0,rows:[]}); g.value+=amount; if(row) g.rows.push(row); };
+  if(k==='資産'){
+    ASSETS.main.forEach(ac=>{ const bal=assetBalance(ac); push(ac.name+'（'+ac.owner+'）', bal, {store:ac.name, date:ac.owner, amount:bal}); });
+  }else{ // 収入
+    assetIncome(state.currentMonth).forEach(e=>push(e.name||'収入', Number(e.amount)||0, {store:e.name||'収入', date:e.who||'', amount:Number(e.amount)||0}));
+    rows.filter(r=>r.kubun==='収入').forEach(r=>push(r.category||r.store||'収入', r.amount, r));
+  }
+  const labels=Object.keys(groupMap).sort((a,b)=>groupMap[b].value-groupMap[a].value);
   chartGroups = labels.map(l=>({label:l, value:groupMap[l].value, color:colorFor(l), rows:groupMap[l].rows}));
   const total = chartGroups.reduce((a,g)=>a+g.value,0);
-
   document.getElementById('centerLbl').textContent = k;
   document.getElementById('centerVal').textContent = yen(total);
   document.getElementById('chartTotal').textContent = yen(total);
-
   renderCatList(total);
   try{ drawDonut(chartGroups.map(g=>g.label), chartGroups.map(g=>g.value), chartGroups.map(g=>g.color)); }
   catch(e){ console.warn('chart draw failed', e); }
@@ -1035,26 +1077,22 @@ function renderCatList(total){
   const catList=document.getElementById('catList');
   catList.innerHTML='';
   if(!chartGroups.length){ catList.innerHTML='<div class="empty">この月のデータはまだありません</div>'; return; }
-  // 支出は0円カテゴリーも一覧に出す（全体像を把握しやすく）
-  let list=chartGroups.slice();
-  if(state.chartKubun==='支出'){
-    const have=new Set(list.map(g=>g.label));
-    CATEGORIES.filter(c=>c!=='会社の立替金' && !have.has(c)).forEach(c=>list.push({label:c,value:0,color:colorFor(c),rows:[]}));
-  }
-  list.forEach(g=>{
+  chartGroups.forEach(g=>{
     const pct = total>0 ? Math.round(g.value/total*100) : 0;
     const open = state.chartOpen.has(g.label);
     const row=document.createElement('div');
     row.className='catline'+(g.rows.length?' hasdetail':'');
     row.innerHTML='<span class="dot" style="background:'+g.color+'"></span>'+
-      '<span class="name">'+esc(g.label)+'</span><span class="pct">'+pct+'%</span><span class="v">'+yen(g.value)+'</span>'+
+      '<span class="name">'+esc(g.label)+(g.fixed?'<span class="fixtag">固定</span>':'')+'</span><span class="pct">'+pct+'%</span><span class="v">'+yen(g.value)+'</span>'+
       '<span class="chev">'+(g.rows.length?(open?'▾':'▸'):'')+'</span>';
     if(g.rows.length){ row.onclick=()=>{ if(state.chartOpen.has(g.label)) state.chartOpen.delete(g.label); else state.chartOpen.add(g.label); renderCatList(total); }; }
     catList.appendChild(row);
     if(open && g.rows.length){
       const d=document.createElement('div'); d.className='catdetail';
       d.innerHTML=g.rows.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>
-        '<div class="cdrow"><span class="cdn">'+esc(r.store||r.category||'')+(r.date?'<small>'+esc(r.date)+'</small>':'')+'</span><span class="cdv">'+yen(r.amount)+'</span></div>'
+        r.amount==null
+          ? '<div class="cdrow"><span class="cdn">'+esc(r.store||'')+'</span></div>'
+          : '<div class="cdrow"><span class="cdn">'+esc(r.store||r.category||'')+(r.date?'<small>'+esc(r.date)+'</small>':'')+'</span><span class="cdv">'+yen(r.amount)+'</span></div>'
       ).join('');
       catList.appendChild(d);
     }
@@ -1080,15 +1118,11 @@ let budgetReceipt = 0;      // 立替・特別費を除いた今月のレシー�
 let budgetEvent = 0;        // 今月の特別費（イベント）合計
 let receiptAuto = {};       // itemKey -> 今月のレシート合計
 let receiptByItem = {};     // itemKey -> [該当レシート行]（内訳表示用）
-let receiptMisc = 0;        // どの予算項目にも当てはまらないレシート（その他など）の合計
-let receiptMiscRows = [];   // その他（レシート分）の明細
-// 予算項目の現状 ＝ レシートからの自動集計 ＋ 手入力の補正値（固定費など）
-function itemActual(groupKey, it){
-  return (receiptAuto[it.k]||0) + bActual(it.k);
-}
-
-function bTarget(it){ if(budgetData.targets && budgetData.targets[it.k]!=null) return Number(budgetData.targets[it.k]); return (it.w!=null ? it.w : null); }
+// 変動費の目標＝（編集で上書きがあれば）それ、無ければ既定値。固定費は常に既定値（固定化）。
+function bTarget(it, g){ g=g||groupOf(it.k); if(g && g.variable && budgetData.targets && budgetData.targets[it.k]!=null) return Number(budgetData.targets[it.k]); return Number(it.w)||0; }
 function bActual(k){ const m=state.currentMonth; const a=budgetData.actuals && budgetData.actuals[m]; return (a && a[k]!=null) ? Number(a[k]) : 0; }
+// 現状：固定費＝目標どおり、変動費＝レシート自動＋手入力補正
+function itemActual(it, g){ g=g||groupOf(it.k); if(g && g.fixed) return bTarget(it,g); return (receiptAuto[it.k]||0) + bActual(it.k); }
 
 async function fetchBudget(){
   if(isDemo()){
@@ -1111,35 +1145,28 @@ async function loadBudget(){
   document.getElementById('budgetMonth').textContent = monthLabel(state.currentMonth);
   if(!budgetLoaded) await fetchBudget();
   const rows = await getRows(state.currentMonth);
-  let exp=0;
-  receiptAuto={}; receiptByItem={}; receiptMisc=0; receiptMiscRows=[]; budgetEvent=0; window._eventRows=[];
+  let varTotal=0;
+  receiptAuto={}; receiptByItem={}; budgetEvent=0; window._eventRows=[];
   rows.forEach(r=>{
     if(r.kubun!=='支出') return;
     if(r.householdType==='会社立替') return;           // 立替は家計の現状に含めない
     if((r.category||'')===EVENT_CAT){                   // 特別費（イベント）は月々の予算とは別管理
       budgetEvent += r.amount; window._eventRows.push(r); return;
     }
-    exp += r.amount;
-    const tgt = RECEIPT_MAP[r.category||'その他'];
-    if(tgt){
-      receiptAuto[tgt] = (receiptAuto[tgt]||0) + r.amount;
-      (receiptByItem[tgt] = receiptByItem[tgt]||[]).push(r);
-    }else{
-      receiptMisc += r.amount; receiptMiscRows.push(r);
+    const key = RECEIPT_MAP[r.category||'その他'];
+    const vk = (key && VARIABLE_KEYS.has(key)) ? key : (key ? null : 'etc');
+    if(vk){ // 変動費キーに集計（固定費キー＝衣服・交通などは固定扱いのため集計しない）
+      receiptAuto[vk] = (receiptAuto[vk]||0) + r.amount;
+      (receiptByItem[vk] = receiptByItem[vk]||[]).push(r);
+      varTotal += r.amount;
     }
   });
-  budgetReceipt = exp; // 立替・特別費を除いた今月のレシート支出合計
-  if(!state.budgetView) state.budgetView='check';
+  budgetReceipt = varTotal; // 変動費の今月レシート合計
   renderBudget();
 }
-function setBudgetView(v){ state.budgetView=v; state.budgetEdit=false; renderBudget(); }
 function toggleBudgetEdit(){ state.budgetEdit=!state.budgetEdit; renderBudget(); }
 function renderBudget(){
-  const seg='<div class="seg" style="margin-bottom:12px;">'+
-    '<button class="'+(state.budgetView!=='compare'?'on':'')+'" onclick="setBudgetView(\'check\')">今月の予算チェック</button>'+
-    '<button class="'+(state.budgetView==='compare'?'on':'')+'" onclick="setBudgetView(\'compare\')">旧→新の比較</button>'+
-    '</div>';
-  document.getElementById('budgetBody').innerHTML = seg + (state.budgetView==='compare' ? renderCompare() : renderCheck());
+  document.getElementById('budgetBody').innerHTML = renderCheck();
   document.getElementById('budgetNote').innerHTML = '';
 }
 // 残り表示（予算を越えたら赤字・マイナス表記）
@@ -1148,55 +1175,57 @@ function remainHtml(t, a){
   if(rem>=0) return '<span class="bremain ok">残り '+yc(rem)+'</span>';
   return '<span class="bremain over">▲'+yc(-rem)+' 赤字</span>';
 }
+function budgetDetailHtml(det, isFixed){
+  if(!det || !det.length) return '';
+  const inner = isFixed
+    ? det.map(s=>esc(s)).join('<br>')
+    : det.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>esc((r.store||'')+'（'+(r.date||'')+'）')+' '+yc(r.amount)).join('<br>');
+  return '<div class="bdetail"><div class="bdetail-in">'+inner+'</div></div>';
+}
 function bgroupCard(g, opts){
   opts=opts||{};
-  const autoG = g.key==='rakuten';
+  const fixed=!!g.fixed;
   let tsum=0, asum=0, rows='';
   g.items.forEach(it=>{
-    const t=bTarget(it);
-    if(t==null && !state.budgetEdit) return; // 廃止項目は通常表示では隠す
-    const rcpt = receiptAuto[it.k]||0;        // レシートからの自動分
-    const man  = bActual(it.k);               // 手入力の補正分
-    const a=rcpt+man;
-    if(t!=null){ tsum+=t; asum+=a; }
-    if(state.budgetEdit){
-      // 現状は「手入力分」を編集。レシート自動分があれば加算されることを注記
+    const t = fixed ? it.w : bTarget(it,g);
+    const rcpt = fixed ? 0 : (receiptAuto[it.k]||0);
+    const man  = fixed ? 0 : bActual(it.k);
+    const a = fixed ? it.w : (rcpt+man);
+    tsum+=t; asum+=a;
+    const det = fixed ? (it.sub||null) : (receiptByItem[it.k]||null);
+    if(state.budgetEdit && !fixed){
       const note = rcpt>0 ? '<small>＋レシート'+yc(rcpt)+'</small>' : '';
       rows+='<div class="bli e"><span class="nm">'+esc(it.n)+'</span>'+
-        '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="t" placeholder="目標" value="'+(t==null?'':t)+'">'+
+        '<input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="t" placeholder="目標" value="'+t+'">'+
         '<span class="icell"><input type="number" inputmode="numeric" data-bk="'+it.k+'" data-bt="a" placeholder="手入力" value="'+(man||'')+'">'+note+'</span></div>';
+    }else if(state.budgetEdit && fixed){
+      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'<span class="fixtag">固定</span></span><span class="v" style="grid-column:span 2">'+yc(t)+'</span><span class="v" style="color:var(--sub)">固定</span></div>';
     }else{
-      const rem=t-a;
-      rows+='<div class="bli"><span class="nm">'+esc(it.n)+(rcpt>0?'<span class="autotag">自動</span>':'')+'</span>'+
+      const rem=t-a, hasDet=det&&det.length;
+      const click=hasDet?' onclick="this.nextElementSibling.classList.toggle(\'open\')"':'';
+      rows+='<div class="bli'+(hasDet?' bexp':'')+'"'+click+'><span class="nm">'+esc(it.n)+(rcpt>0?'<span class="autotag">自動</span>':'')+(fixed?'<span class="fixtag">固定</span>':'')+(hasDet?' <span class="chev">›</span>':'')+'</span>'+
         '<span class="v">'+yc(t)+'</span><span class="v">'+yc(a)+'</span>'+
-        '<span class="v" style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+(rem<0?'▲'+yc(-rem):yc(rem))+'</span>'+
-      '</div>';
+        (fixed? '<span class="v" style="color:var(--sub)">—</span>' : '<span class="v" style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+(rem<0?'▲'+yc(-rem):yc(rem))+'</span>')+
+      '</div>'+(hasDet?budgetDetailHtml(det, fixed):'');
     }
   });
-  // どの予算項目にも割り当たらないレシート（その他など）＝ 中身を内訳で確認できる
-  if(autoG && (receiptMisc>0 || state.budgetEdit)){
-    asum += receiptMisc;
-    const detail = receiptMiscRows.map(r=>esc((r.store||'')+'（'+(r.category||'その他')+'）')+' '+yc(r.amount)).join('<br>') || 'なし';
-    if(state.budgetEdit){
-      rows+='<div class="bli e"><span class="nm">その他（レシート分）</span><span class="v" style="color:var(--sub)">—</span><span class="v">'+yc(receiptMisc)+'</span></div>';
-    }else{
-      rows+='<div class="bli bexp" onclick="this.nextElementSibling.classList.toggle(\'open\')"><span class="nm">その他（レシート分）<span class="autotag">自動</span> <span class="chev">›</span></span><span class="v" style="color:var(--sub)">—</span><span class="v">'+yc(receiptMisc)+'</span><span class="v">—</span></div>'+
-        '<div class="bdetail"><div class="bdetail-in">'+detail+'</div></div>';
-    }
-  }
   const rem=tsum-asum;
+  const hdr=state.budgetEdit
+    ? (fixed ? '' : '<div class="bli e bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状(手入力)</span></div>')
+    : '<div class="bli bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状</span><span class="v">残り</span></div>';
+  if(fixed){
+    return '<div class="bcard fixedcard"><div class="bhead"><span class="bname">'+esc(g.name)+'<span class="bsub">（'+esc(g.note)+'）</span></span><span class="bremain fix">'+yc(tsum)+' / 月</span></div>'+
+      '<div class="bitems">'+hdr+rows+'</div></div>';
+  }
   const barCls = asum>tsum ? 'over' : '';
   const fill = tsum>0 ? Math.min(100, asum/tsum*100) : 0;
   let pace='';
-  if(opts.pace && opts.isCurrent && !state.budgetEdit && tsum>0){
+  if(opts.isCurrent && !state.budgetEdit && tsum>0){
     const ep=Math.round(opts.elapsed*100), up=Math.round(asum/tsum*100);
     if(asum/tsum<=opts.elapsed) pace='<div class="bpace ok">順調：今日は月の'+ep+'%時点、予算の'+up+'%を使用</div>';
     else pace='<div class="bpace over">ペース超過：今日は月の'+ep+'%時点なのに予算の'+up+'%を使用</div>';
   }
-  const hdr=state.budgetEdit
-    ? '<div class="bli e bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状(手入力)</span></div>'
-    : '<div class="bli bli-head"><span class="nm">項目</span><span class="v">目標</span><span class="v">現状</span><span class="v">残り</span></div>';
-  return '<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'<span class="bsub">（'+esc(g.note)+'）</span></span>'+remainHtml(tsum,asum)+'</div>'+
+  return '<div class="bcard varcard"><div class="bhead"><span class="bname">'+esc(g.name)+'<span class="bsub">（'+esc(g.note)+'）</span></span>'+remainHtml(tsum,asum)+'</div>'+
     '<div class="bbar"><i class="'+barCls+'" style="width:'+Math.max(0,fill)+'%"></i></div>'+
     '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(tsum)+'</b></div><div class="bn"><span>現状</span><b>'+yen(asum)+'</b></div><div class="bn"><span>残り</span><b style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+(rem<0?'▲'+yen(-rem):yen(rem))+'</b></div></div>'+
     pace+'<div class="bitems">'+hdr+rows+'</div></div>';
@@ -1206,52 +1235,36 @@ function renderCheck(){
   const dim=new Date(yy,mm,0).getDate();
   const isCur=(monthKey(now)===state.currentMonth);
   const elapsed=isCur ? now.getDate()/dim : 1;
-  let gt=0, ga=0;
-  BUDGET.groups.forEach(g=>{ g.items.forEach(it=>{ const t=bTarget(it); if(t!=null){ gt+=t; ga+=itemActual(g.key, it); } }); if(g.key==='rakuten') ga+=receiptMisc; });
-  const grem=gt-ga;
-  let h='<div class="bcard total"><div class="bhead"><span class="bname">総予算（新目標）</span>'+remainHtml(gt,ga)+'</div>'+
+  let gt=0, ga=0, vt=0, va=0;
+  BUDGET.groups.forEach(g=>g.items.forEach(it=>{
+    const t = g.fixed ? it.w : bTarget(it,g);
+    const a = itemActual(it,g);
+    gt+=t; ga+=a;
+    if(g.variable){ vt+=t; va+=a; }
+  }));
+  const grem=gt-ga, vrem=vt-va;
+  let h='<div class="bcard total"><div class="bhead"><span class="bname">総予算</span>'+remainHtml(gt,ga)+'</div>'+
     '<div class="bbar"><i class="'+(ga>gt?'over':'')+'" style="width:'+(gt>0?Math.min(100,ga/gt*100):0)+'%"></i></div>'+
-    '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(gt)+'</b></div><div class="bn"><span>現状</span><b>'+yen(ga)+'</b></div><div class="bn"><span>残り</span><b style="color:'+(grem<0?'var(--danger)':'var(--ok)')+'">'+(grem<0?'▲'+yen(-grem):yen(grem))+'</b></div></div></div>';
+    '<div class="bnums"><div class="bn"><span>目標</span><b>'+yen(gt)+'</b></div><div class="bn"><span>現状</span><b>'+yen(ga)+'</b></div><div class="bn"><span>残り</span><b style="color:'+(grem<0?'var(--danger)':'var(--ok)')+'">'+(grem<0?'▲'+yen(-grem):yen(grem))+'</b></div></div>'+
+    '<div class="vsummary"><div class="vs-l"><span>管理対象＝変動費</span><b>現状 '+yen(va)+' ／ 目標 '+yen(vt)+'</b></div>'+remainHtml(vt,va)+'</div></div>';
   if(state.budgetEdit){
     h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">キャンセル</button><button class="btn primary sm" style="flex:1" onclick="saveBudget()">保存する</button></div>';
   }else{
-    h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">✏️ 目標・現状を編集</button></div>';
+    h+='<div class="bedit-actions"><button class="btn ghost sm" style="flex:1" onclick="toggleBudgetEdit()">✏️ 変動費の目標・現状を編集</button></div>';
   }
-  BUDGET.groups.forEach(g=>{ h+=bgroupCard(g, {pace:(g.key==='rakuten'), isCurrent:isCur, elapsed:elapsed}); });
+  // 変動費（管理対象）を先に、固定費を後に
+  BUDGET.groups.filter(g=>g.variable).forEach(g=>{ h+=bgroupCard(g,{isCurrent:isCur,elapsed:elapsed}); });
+  BUDGET.groups.filter(g=>g.fixed).forEach(g=>{ h+=bgroupCard(g,{}); });
   // 特別費（イベント）＝月々の予算とは別。総額だけ把握する
   if(budgetEvent>0){
     const rows=(window._eventRows||[]).map(r=>'<div class="bli"><span class="nm">'+esc(r.store||'')+'</span><span class="v" style="grid-column:span 2;color:var(--sub);text-align:left;padding-left:6px;">'+esc(r.date)+'</span><span class="v">'+yc(r.amount)+'</span></div>').join('');
     h+='<div class="bcard" style="border-color:'+colorFor(EVENT_CAT)+'"><div class="bhead"><span class="bname">特別費（イベント）<span class="bsub">（予算とは別の臨時支出）</span></span><span class="bremain over">'+yc(budgetEvent)+'</span></div>'+
-      '<div class="bnums"><div class="bn"><span>今月の総支出</span><b>'+yen(budgetReceipt+budgetEvent)+'</b></div><div class="bn"><span>うち特別費</span><b style="color:'+colorFor(EVENT_CAT)+'">'+yen(budgetEvent)+'</b></div><div class="bn"><span>ベース支出</span><b>'+yen(budgetReceipt)+'</b></div></div>'+
+      '<div class="bnums"><div class="bn"><span>今月の総支出</span><b>'+yen(budgetReceipt+budgetEvent)+'</b></div><div class="bn"><span>うち特別費</span><b style="color:'+colorFor(EVENT_CAT)+'">'+yen(budgetEvent)+'</b></div><div class="bn"><span>変動費ベース</span><b>'+yen(budgetReceipt)+'</b></div></div>'+
       '<div class="bitems"><div class="bli bli-head"><span class="nm">内容</span><span class="v" style="grid-column:span 2;text-align:left;padding-left:6px;">日付</span><span class="v">金額</span></div>'+rows+'</div></div>';
   }
-  h+='<p class="hint" style="margin-top:4px;line-height:1.7;">※「<b>自動</b>」付きの項目は、レシートを登録するとリアルタイムで現状に反映されます（立替・特別費を除く今月のレシート合計 '+yen(budgetReceipt)+'）。<br>'+
-     '※固定費（水道・ガス・サブスク等）や銀行引き落とし・保険は「✏️編集」の手入力欄で入れられます（レシート分があれば自動で加算）。保存すると夫婦で共有されます。<br>'+
+  h+='<p class="hint" style="margin-top:4px;line-height:1.7;">※管理の中心は<b>楽天カード（変動費）</b>です。レシートを登録すると「<b>自動</b>」項目の現状にリアルタイム反映されます（今月の変動費レシート合計 '+yen(budgetReceipt)+'）。<br>'+
+     '※固定費（楽天カード固定費・銀行引き落とし・不定期費用保険）は毎月決まった額として<b>固定</b>（現状＝目標）にしています。<br>'+
      '※「特別費（イベント）」は入力時に支出項目で選ぶと、月々の予算とは別枠で集計されます。</p>';
-  return h;
-}
-function renderCompare(){
-  let h='<p class="hint" style="margin:0 0 10px;line-height:1.7;">旧目標と新目標の差です（新目標は編集後の値を反映）。<span style="color:var(--danger)">赤=増</span>／<span style="color:var(--ok)">緑=減</span>。</p>';
-  let go=0, gw=0;
-  BUDGET.groups.forEach(g=>{
-    let os=0, ws=0, rows='<div class="bli bli-head"><span class="nm">項目</span><span class="v">旧目標</span><span class="v">新目標</span><span class="v">差</span></div>';
-    g.items.forEach(it=>{
-      const o=it.o||0; const w=bTarget(it);
-      os+=o; if(w!=null) ws+=w;
-      const d=(w==null?0:w)-o;
-      const wShow=(w==null)?'—':yc(w);
-      const dShow=(w==null)?('−'+yc(o)):((d>0?'+':(d<0?'−':''))+yc(Math.abs(d)));
-      const dCol=(d>0?'var(--danger)':(d<0?'var(--ok)':'var(--sub)'));
-      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'</span><span class="v">'+yc(o)+'</span><span class="v">'+wShow+'</span><span class="v" style="color:'+dCol+'">'+dShow+'</span></div>';
-    });
-    go+=os; gw+=ws; const gd=ws-os;
-    h+='<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'</span><span class="bpct" style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">差 '+(gd>0?'+':'')+yen(gd)+'</span></div>'+
-      '<div class="bnums"><div class="bn"><span>旧目標</span><b>'+yen(os)+'</b></div><div class="bn"><span>新目標</span><b>'+yen(ws)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div>'+
-      '<div class="bitems">'+rows+'</div></div>';
-  });
-  const gd=gw-go;
-  h+='<div class="bcard total"><div class="bhead"><span class="bname">合計</span><span class="bpct" style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">差 '+(gd>0?'+':'')+yen(gd)+'</span></div>'+
-     '<div class="bnums"><div class="bn"><span>旧目標</span><b>'+yen(go)+'</b></div><div class="bn"><span>新目標</span><b>'+yen(gw)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div></div>';
   return h;
 }
 async function saveBudget(){
