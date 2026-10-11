@@ -81,6 +81,7 @@
   .item .dot{width:11px; height:11px; border-radius:50%; flex:none;}
   .item .mid{flex:1; min-width:0;}
   .item .mid .t1{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .item .mid .t15{font-size:11.5px; color:#6b6b6b; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .item .mid .t2{font-size:11.5px; color:var(--sub); margin-top:2px;}
   .item .amt{font-weight:700; font-size:15px; white-space:nowrap;}
   .tag{display:inline-block; font-size:10px; padding:1px 7px; border-radius:20px; margin-left:6px; vertical-align:middle;}
@@ -216,8 +217,9 @@
   .catdetail{background:#faf8f4; border-radius:10px; padding:6px 10px; margin:0 2px 8px;}
   .cdrow{display:flex; justify-content:space-between; gap:10px; padding:4px 0; font-size:12px; border-bottom:1px solid #f0ece4;}
   .cdrow:last-child{border-bottom:none;}
-  .cdrow .cdn{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .cdrow .cdn{min-width:0; overflow:hidden;}
   .cdrow .cdn small{color:#aaa; margin-left:6px;}
+  .cdrow .cdn small.cddesc{display:block; margin-left:0; color:#6b6b6b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .cdrow .cdv{font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums;}
 
   /* 資産 */
@@ -982,15 +984,22 @@ function renderDayList(){
   area.innerHTML='';
   list.forEach(r=>area.appendChild(renderItem(r)));
 }
+// 購入内容の1文目（要約行）を取り出す。【内訳】以降や空行は除く。
+function firstItemLine(r){
+  const t=(r&&r.items||'').split('\n').map(s=>s.trim()).filter(s=>s && s!=='【内訳】' && !s.startsWith('【内訳】'));
+  return t.length ? t[0] : '';
+}
 function renderItem(r){
   const adv = r.householdType==='会社立替';
   const div=document.createElement('div');
   div.className='item';
   div.style.cursor='pointer';
   const sign = r.kubun==='収入' ? '+' : '';
+  const desc = firstItemLine(r);
   div.innerHTML =
     '<span class="dot" style="background:'+colorFor(r.category)+'"></span>'+
     '<div class="mid"><div class="t1">'+esc(r.store||r.kubun)+ (adv?'<span class="tag adv">立替</span>':'') +'</div>'+
+    (desc?'<div class="t15">'+esc(desc)+'</div>':'')+
     '<div class="t2">'+esc(r.date)+'　'+esc(r.kubun==='支出'?(r.category||''):r.kubun)+'　'+esc(r.registrant)+'</div></div>'+
     '<div class="amt">'+sign+yen(r.amount)+'</div>'+
     '<span class="chev" style="color:#ccc;font-size:15px;margin-left:4px;">›</span>';
@@ -1107,11 +1116,11 @@ function renderCatList(total){
     catList.appendChild(row);
     if(open && g.rows.length){
       const d=document.createElement('div'); d.className='catdetail';
-      d.innerHTML=g.rows.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>
-        r.amount==null
-          ? '<div class="cdrow"><span class="cdn">'+esc(r.store||'')+'</span></div>'
-          : '<div class="cdrow"><span class="cdn">'+esc(r.store||r.category||'')+(r.date?'<small>'+esc(r.date)+'</small>':'')+'</span><span class="cdv">'+yen(r.amount)+'</span></div>'
-      ).join('');
+      d.innerHTML=g.rows.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>{
+        if(r.amount==null) return '<div class="cdrow"><span class="cdn">'+esc(r.store||'')+'</span></div>';
+        const desc=firstItemLine(r);
+        return '<div class="cdrow"><span class="cdn">'+esc(r.store||r.category||'')+(desc?'<small class="cddesc">'+esc(desc)+'</small>':'')+(r.date?'<small>'+esc(r.date)+'</small>':'')+'</span><span class="cdv">'+yen(r.amount)+'</span></div>';
+      }).join('');
       catList.appendChild(d);
     }
   });
@@ -1236,7 +1245,7 @@ function budgetDetailHtml(det, isFixed){
   if(!det || !det.length) return '';
   const inner = isFixed
     ? det.map(s=>esc(s)).join('<br>')
-    : det.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>esc((r.store||'')+'（'+(r.date||'')+'）')+' '+yc(r.amount)).join('<br>');
+    : det.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(r=>{ const d=firstItemLine(r); return esc((r.store||'')+(d?'｜'+d:'')+'（'+(r.date||'')+'）')+' '+yc(r.amount); }).join('<br>');
   return '<div class="bdetail"><div class="bdetail-in">'+inner+'</div></div>';
 }
 function bgroupCard(g, opts){
