@@ -195,6 +195,8 @@
   .bcard.varcard{border-color:var(--orange); border-width:1.5px;}
   .bcard.fixedcard{background:#faf9f7;}
   .fixtag{display:inline-block; font-size:8.5px; font-weight:700; color:#fff; background:#b3aca2; border-radius:4px; padding:1px 4px; margin-left:5px; vertical-align:middle;}
+  .bli .nm.wrap{white-space:normal;}
+  .bli .ihint{display:block; font-size:9px; color:var(--sub); font-weight:400; line-height:1.25; margin-top:1px;}
   .catline .fixtag{margin-left:4px;}
   .vsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; padding-top:9px; border-top:1px dashed var(--line); flex-wrap:wrap;}
   .vsummary .vs-l span{display:block; font-size:10.5px; color:var(--sub);}
@@ -321,8 +323,9 @@
       <input id="fStore" type="text" placeholder="例）スーパー○○" oninput="clearMiss(this)">
 
       <div id="catBox">
-        <label class="f">支出項目</label>
+        <label class="f">支出項目（楽天カードの変動費）</label>
         <select id="fCategory"></select>
+        <p class="hint" style="margin-top:5px;line-height:1.6;">日用品＝<b>使うとなくなる物</b>（ティッシュ・洗剤・歯磨き粉など）／生活用品・雑貨＝<b>しばらく残る物</b>（収納・食器・タオル・文房具など）。迷ったら「1か月以内で消費→日用品」「数か月〜数年使う→生活用品・雑貨」。</p>
       </div>
 
       <label class="f">購入内容（要約＋レシートの内訳）</label>
@@ -483,7 +486,7 @@ const BUDGET = {
       {k:'suido',n:'水道代',w:5717},
       {k:'gas',n:'ガス代',w:8000},
       {k:'denki',n:'電気代',w:10000},
-      {k:'net',n:'ネット代',w:6000},
+      {k:'net',n:'ネット代',w:10000},
       {k:'keitai',n:'携帯代',w:20000},
       {k:'subsc',n:'サブスク・デジタル代',w:18463, sub:[
         'LINEマンガ（Google Play） ¥2,000','Claude ¥3,613','ChatGPT Plus ¥3,000','U-NEXT サッカーパック ¥3,000',
@@ -497,11 +500,12 @@ const BUDGET = {
     { key:'rakutenVar', name:'楽天カード（変動費）', note:'ここを日々レシートで管理', variable:true, items:[
       {k:'shoku',n:'食費',w:40000},
       {k:'gaishoku',n:'外食費',w:30000},
-      {k:'nichiyo',n:'日用品',w:10000},
-      {k:'gacha',n:'ガチャ／UFO費',w:12500},
+      {k:'nichiyo',n:'日用品',w:10000,h:'消耗品：ティッシュ・洗剤・歯磨き粉・ゴミ袋など'},
+      {k:'seikatsu',n:'生活用品・雑貨',w:10000,h:'長く使う物：収納・食器・タオル・文房具・小型家電など'},
+      {k:'gacha',n:'ガチャ／UFO費',w:10000},
       {k:'leisure',n:'レジャー費',w:20000},
       {k:'iro',n:'いろちゃん',w:10000},
-      {k:'iryo',n:'医療費',w:0},
+      {k:'iryo',n:'医療費',w:10000},
       {k:'etc',n:'その他',w:0}
     ]},
     { key:'bank', name:'銀行引き落とし', note:'毎月固定・予算どおり', fixed:true, items:[
@@ -514,11 +518,10 @@ const BUDGET = {
       {k:'tokei',n:'旦那 時計代（JACCS）',w:5400},
       {k:'ecc',n:'ECC',w:12650},
       {k:'piano',n:'ピアノ',w:8000},
-      {k:'dance',n:'ダンス',w:15000}
+      {k:'dance',n:'ダンス',w:15000},
+      {k:'eigo',n:'旦那 英語教室代',w:10000}
     ]},
     { key:'insurance', name:'不定期費用・保険', note:'毎月固定・予算どおり', fixed:true, items:[
-      {k:'kasai',n:'火災保険・地震保険',w:3333},
-      {k:'kotei',n:'固定資産税',w:6500},
       {k:'hoken',n:'保険費用（夫婦合計）',w:10000}
     ]}
   ]
@@ -527,24 +530,38 @@ const BUDGET = {
 const VARIABLE_KEYS = new Set(BUDGET.groups.filter(g=>g.variable).flatMap(g=>g.items.map(i=>i.k)));
 function groupOf(key){ return BUDGET.groups.find(g=>g.items.some(i=>i.k===key)); }
 
+// 旧予算（最初の目標。旧→新の比較用）key→旧目標額。現在は廃止の項目も含む。
+const OLD_TARGETS = {
+  suido:5717,gas:8000,denki:10000,net:6000,keitai:20000,gasorin:15000,subsc:4000,office:1284,
+  clothH:10000,clothW:10000,kosodate:30000,clothK:0,rougo:50000,shoku:51000,gaishoku:0,nespresso:4000,
+  nichiyo:10000,kotsu:0,granberry:0,leisure:0,
+  loanH:115000,kanri:3000,shogaku:17331,paypay:20000,okozukaiW:20000,kyoiku:30000,hoikuen:5000,tokei:0,ecc:0,piano:0,dance:0,
+  kasai:3333,kotei:6500,iryoH:1000,hoken:0
+};
+// 旧予算にあって現在は無い（廃止された）項目の名称
+const OLD_LABELS = { gasorin:'ガソリン代',office:'Word・Excel代',kosodate:'娘 子育て費用全般',clothK:'子ども衣類',
+  nespresso:'ネスプレッソ',granberry:'グランベリー費',kasai:'火災保険・地震保険',kotei:'固定資産税',iryoH:'旦那 医療保険' };
+
 // レシートの支出項目 → 予算項目キー への対応。変動費キーに当たればそこへ自動集計、
 // 固定費キー（衣服・交通など）に当たれば記録のみ（予算は固定）、該当なしは その他(変動) へ。
 const RECEIPT_MAP = {
-  '食費':'shoku','外食費':'gaishoku','日用品':'nichiyo','生活用品・雑貨':'nichiyo',
+  '食費':'shoku','外食費':'gaishoku','日用品':'nichiyo','生活用品・雑貨':'seikatsu',
   'いろちゃん':'iro','医療費':'iryo','レジャー費':'leisure',
   'ガチャ／UFO費':'gacha','グランベリー費':'gacha','その他':'etc',
   '旦那 衣服代':'clothH','妻 衣服代':'clothW','嫁 衣服代':'clothW','衣服代':'clothW',
   'ガソリン・交通費':'kotsu','交通費':'kotsu','ガソリン代':'kotsu'
 };
 
-// 入力時に選べる支出項目（日々のレシート＝変動費中心。衣服・交通は記録用に残す）
-const CATEGORIES = ['食費','外食費','日用品','ガチャ／UFO費','レジャー費','いろちゃん','医療費',
-  '旦那 衣服代','妻 衣服代','交通費', EVENT_CAT,'その他','会社の立替金'];
+// 入力時に選べる支出項目（楽天カードの変動費のものに限る＋特別費・会社立替）
+const CATEGORIES = ['食費','外食費','日用品','生活用品・雑貨','ガチャ／UFO費','レジャー費','いろちゃん','医療費','その他',
+  EVENT_CAT,'会社の立替金'];
+// 入力の選択肢に出す簡単な補足（迷わないように）
+const CAT_HINT = { '日用品':'消耗品', '生活用品・雑貨':'長く使う物' };
 
 // カテゴリー色（グラフ・一覧で共通）。未定義の項目はキーから自動生成。
 const CAT_COLORS = {
   '食費':'#ff8f8f','外食費':'#8fd48f','いろちゃん':'#ffc0d9','日用品':'#ffd27f',
-  'ガチャ／UFO費':'#c9a7e6','レジャー費':'#ffcf6b','医療費':'#7fd6c0',
+  '生活用品・雑貨':'#a7cfe6','ガチャ／UFO費':'#c9a7e6','レジャー費':'#ffcf6b','医療費':'#7fd6c0',
   '旦那 衣服代':'#9fb8e6','妻 衣服代':'#b6a6e8','嫁 衣服代':'#b6a6e8','交通費':'#b7d98f',
   'ガソリン・交通費':'#b7d98f',
   [EVENT_CAT]:'#b05ad6','その他':'#e8dcc8','会社の立替金':'#ffa94d'
@@ -570,6 +587,7 @@ let state = {
   editingId: null, // 編集中の取引ID（新規登録時は null）
   chartOpen: new Set(), // グラフ内訳で開いている項目
   expenseMode: 'var',   // 支出グラフ: 'var'=変動費のみ / 'all'=全体
+  budgetView: 'check',  // 予算: 'check'=今月のチェック / 'compare'=旧→新比較
   budgetEdit: false,
   assetEdit: false,
 };
@@ -610,7 +628,7 @@ function assetProjected(){ return (assetsData().projected||[]).slice(); }
 window.addEventListener('DOMContentLoaded', () => {
   // カテゴリー選択肢
   const sel = document.getElementById('fCategory');
-  CATEGORIES.forEach(c => { const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  CATEGORIES.forEach(c => { const o=document.createElement('option'); o.value=c; o.textContent=c+(CAT_HINT[c]?'（'+CAT_HINT[c]+'）':''); sel.appendChild(o); });
 
   document.getElementById('setRegistrant').value = store.registrant;
   document.getElementById('setUrl').value = store.url;
@@ -1165,9 +1183,48 @@ async function loadBudget(){
   renderBudget();
 }
 function toggleBudgetEdit(){ state.budgetEdit=!state.budgetEdit; renderBudget(); }
+function setBudgetView(v){ state.budgetView=v; state.budgetEdit=false; renderBudget(); }
 function renderBudget(){
-  document.getElementById('budgetBody').innerHTML = renderCheck();
+  const seg='<div class="seg" style="margin-bottom:12px;">'+
+    '<button class="'+(state.budgetView!=='compare'?'on':'')+'" onclick="setBudgetView(\'check\')">今月の予算チェック</button>'+
+    '<button class="'+(state.budgetView==='compare'?'on':'')+'" onclick="setBudgetView(\'compare\')">旧→新の比較</button>'+
+    '</div>';
+  document.getElementById('budgetBody').innerHTML = seg + (state.budgetView==='compare' ? renderCompare() : renderCheck());
   document.getElementById('budgetNote').innerHTML = '';
+}
+// 旧→新の比較（OLD_TARGETS＝最初の予算。現行の各項目＋廃止された旧項目を表示）
+function renderCompare(){
+  let h='<p class="hint" style="margin:0 0 10px;line-height:1.7;">最初の予算（旧）と今の予算（新）の差です。<span style="color:var(--danger)">赤=増</span>／<span style="color:var(--ok)">緑=減</span>。</p>';
+  let go=0, gw=0;
+  BUDGET.groups.forEach(g=>{
+    let os=0, ws=0, rows='<div class="bli bli-head"><span class="nm">項目</span><span class="v">旧</span><span class="v">新</span><span class="v">差</span></div>';
+    g.items.forEach(it=>{
+      const o=OLD_TARGETS[it.k]||0; const w=it.w;
+      os+=o; ws+=w;
+      const d=w-o, dCol=(d>0?'var(--danger)':(d<0?'var(--ok)':'var(--sub)'));
+      rows+='<div class="bli"><span class="nm">'+esc(it.n)+'</span><span class="v">'+(o?yc(o):'—')+'</span><span class="v">'+yc(w)+'</span><span class="v" style="color:'+dCol+'">'+(d>0?'+':(d<0?'−':''))+yc(Math.abs(d))+'</span></div>';
+    });
+    go+=os; gw+=ws; const gd=ws-os;
+    h+='<div class="bcard"><div class="bhead"><span class="bname">'+esc(g.name)+'</span><span class="bremain '+(gd>0?'over':'ok')+'">'+(gd>0?'+':'')+yen(gd)+'</span></div>'+
+      '<div class="bnums"><div class="bn"><span>旧</span><b>'+yen(os)+'</b></div><div class="bn"><span>新</span><b>'+yen(ws)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div>'+
+      '<div class="bitems">'+rows+'</div></div>';
+  });
+  // 旧予算にあって今は廃止された項目
+  const curKeys=new Set(BUDGET.groups.flatMap(g=>g.items.map(i=>i.k)));
+  const dropped=Object.keys(OLD_TARGETS).filter(k=>!curKeys.has(k) && OLD_TARGETS[k]>0);
+  let oldOnly=0;
+  if(dropped.length){
+    let rows='<div class="bli bli-head"><span class="nm">項目</span><span class="v">旧</span><span class="v">新</span><span class="v">差</span></div>';
+    dropped.forEach(k=>{ const o=OLD_TARGETS[k]; oldOnly+=o;
+      rows+='<div class="bli"><span class="nm">'+esc(OLD_LABELS[k]||k)+'</span><span class="v">'+yc(o)+'</span><span class="v" style="color:var(--sub)">廃止</span><span class="v" style="color:var(--ok)">−'+yc(o)+'</span></div>';
+    });
+    go+=oldOnly;
+    h+='<div class="bcard"><div class="bhead"><span class="bname">廃止した項目（旧のみ）</span><span class="bremain ok">−'+yen(oldOnly)+'</span></div><div class="bitems">'+rows+'</div></div>';
+  }
+  const gd=gw-go;
+  h+='<div class="bcard total"><div class="bhead"><span class="bname">合計</span><span class="bremain '+(gd>0?'over':'ok')+'">'+(gd>0?'+':'')+yen(gd)+'</span></div>'+
+     '<div class="bnums"><div class="bn"><span>旧予算</span><b>'+yen(go)+'</b></div><div class="bn"><span>新予算</span><b>'+yen(gw)+'</b></div><div class="bn"><span>差</span><b style="color:'+(gd>0?'var(--danger)':'var(--ok)')+'">'+(gd>0?'+':'')+yen(gd)+'</b></div></div></div>';
+  return h;
 }
 // 残り表示（予算を越えたら赤字・マイナス表記）
 function remainHtml(t, a){
@@ -1203,7 +1260,8 @@ function bgroupCard(g, opts){
     }else{
       const rem=t-a, hasDet=det&&det.length;
       const click=hasDet?' onclick="this.nextElementSibling.classList.toggle(\'open\')"':'';
-      rows+='<div class="bli'+(hasDet?' bexp':'')+'"'+click+'><span class="nm">'+esc(it.n)+(rcpt>0?'<span class="autotag">自動</span>':'')+(fixed?'<span class="fixtag">固定</span>':'')+(hasDet?' <span class="chev">›</span>':'')+'</span>'+
+      const hint=it.h?'<small class="ihint">'+esc(it.h)+'</small>':'';
+      rows+='<div class="bli'+(hasDet?' bexp':'')+'"'+click+'><span class="nm'+(it.h?' wrap':'')+'">'+esc(it.n)+(rcpt>0?'<span class="autotag">自動</span>':'')+(fixed?'<span class="fixtag">固定</span>':'')+(hasDet?' <span class="chev">›</span>':'')+hint+'</span>'+
         '<span class="v">'+yc(t)+'</span><span class="v">'+yc(a)+'</span>'+
         (fixed? '<span class="v" style="color:var(--sub)">—</span>' : '<span class="v" style="color:'+(rem<0?'var(--danger)':'var(--ok)')+'">'+(rem<0?'▲'+yc(-rem):yc(rem))+'</span>')+
       '</div>'+(hasDet?budgetDetailHtml(det, fixed):'');
